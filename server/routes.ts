@@ -13,7 +13,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ error: 'API key not configured' });
       }
 
-      const response = await fetch('https://api.openrouteservice.org/v2/directions/foot-walking', {
+      const response = await fetch('https://api.openrouteservice.org/v2/directions/foot-walking/geojson', {
         method: 'POST',
         headers: {
           'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
@@ -33,6 +33,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const data = await response.json();
+      console.log('Routing response sample:', JSON.stringify(data).substring(0, 200));
       res.json(data);
     } catch (error) {
       console.error('Routing error:', error);
