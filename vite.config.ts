@@ -1,14 +1,41 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import path from "path";
+import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-// Vite config adjusted for GitHub Pages deployment to the repo site
-// If you publish to https://upshawam.github.io/RunMapper set base to '/RunMapper/'
-// If you publish to a user site (https://upshawam.github.io) change base to '/'
 export default defineConfig({
-  base: '/RunMapper/',
-  plugins: [react()],
+  base: "/RunMapper/",   // important for GitHub Pages
+  plugins: [
+    react(),
+    runtimeErrorOverlay(),
+    ...(process.env.NODE_ENV !== "production" &&
+    process.env.REPL_ID !== undefined
+      ? [
+          await import("@replit/vite-plugin-cartographer").then((m) =>
+            m.cartographer(),
+          ),
+          await import("@replit/vite-plugin-dev-banner").then((m) =>
+            m.devBanner(),
+          ),
+        ]
+      : []),
+  ],
+  resolve: {
+    alias: {
+      "@": path.resolve(import.meta.dirname, "client", "src"),
+      "@shared": path.resolve(import.meta.dirname, "shared"),
+      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+    },
+  },
+  root: path.resolve(import.meta.dirname, "client"),
   build: {
-    outDir: 'docs',
-    sourcemap: false
-  }
-})
+    outDir: path.resolve(import.meta.dirname, "docs"), // output to docs/
+    emptyOutDir: true,
+  },
+  server: {
+    fs: {
+      strict: true,
+      deny: ["**/.*"],
+    },
+  },
+});
