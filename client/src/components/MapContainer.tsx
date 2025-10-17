@@ -24,19 +24,19 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
   const roadsOverlayRef = useRef<L.TileLayer | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
 
-  // ✅ Updated: direct call to OpenRouteService GeoJSON endpoint
+  // ✅ Updated: direct call to ORS with fallback
   const getRouteBetweenPoints = async (
     start: [number, number],
     end: [number, number]
   ): Promise<[number, number][]> => {
     try {
       const response = await fetch(
-        `https://api.openrouteservice.org/v2/directions/foot-walking/geojson`,
+        "https://api.openrouteservice.org/v2/directions/foot-walking/geojson",
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImJjOWZhZmQ5MmY0ZDRhMjQ5ZjliYzIwMDNkNzY3MDllIiwiaCI6Im11cm11cjY0In0=' // 👈 your ORS key
+            "Content-Type": "application/json",
+            "Authorization": "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImJjOWZhZmQ5MmY0ZDRhMjQ5ZjliYzIwMDNkNzY3MDllIiwiaCI6Im11cm11cjY0In0=" // 👈 replace with your real key
           },
           body: JSON.stringify({
             coordinates: [
@@ -48,25 +48,22 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
       );
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.warn('Routing API failed:', errorText);
-        return [start, end];
+        console.warn("Routing API failed:", await response.text());
+        return [start, end]; // fallback: straight line
       }
 
       const data = await response.json();
+      const coords = data.features?.[0]?.geometry?.coordinates;
 
-      if (!data.features?.[0]?.geometry?.coordinates) {
-        console.warn('Invalid routing response format', data);
-        return [start, end];
+      if (!coords) {
+        console.warn("Invalid routing response format", data);
+        return [start, end]; // fallback
       }
 
-      const coordinates = data.features[0].geometry.coordinates;
-      return coordinates.map(
-        (coord: number[]) => [coord[1], coord[0]] as [number, number]
-      );
-    } catch (error) {
-      console.error('Routing error:', error instanceof Error ? error.message : String(error));
-      return [start, end];
+      return coords.map((c: number[]) => [c[1], c[0]] as [number, number]);
+    } catch (err) {
+      console.error("Routing error:", err);
+      return [start, end]; // fallback
     }
   };
 
