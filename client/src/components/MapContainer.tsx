@@ -24,25 +24,18 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
   const roadsOverlayRef = useRef<L.TileLayer | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
 
-  // ✅ Updated to call ORS directly with your API key
   const getRouteBetweenPoints = async (start: [number, number], end: [number, number]): Promise<[number, number][]> => {
     try {
-      const response = await fetch(
-        "https://api.openrouteservice.org/v2/directions/foot-walking/geojson",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImJjOWZhZmQ5MmY0ZDRhMjQ5ZjliYzIwMDNkNzY3MDllIiwiaCI6Im11cm11cjY0In0="
-          },
-          body: JSON.stringify({
-            coordinates: [
-              [start[1], start[0]], // ORS expects [lng, lat]
-              [end[1], end[0]]
-            ]
-          })
-        }
-      );
+      const response = await fetch('/api/route', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          start,
+          end
+        })
+      });
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -51,13 +44,15 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
       }
 
       const data = await response.json();
-      const coords = data.features?.[0]?.geometry?.coordinates;
-      if (!coords) {
+      
+      if (!data.features || !data.features[0] || !data.features[0].geometry) {
         console.warn('Invalid routing response format');
         return [start, end];
       }
-
-      return coords.map((coord: number[]) => [coord[1], coord[0]] as [number, number]);
+      
+      const coordinates = data.features[0].geometry.coordinates;
+      
+      return coordinates.map((coord: number[]) => [coord[1], coord[0]] as [number, number]);
     } catch (error) {
       console.error('Routing error:', error instanceof Error ? error.message : String(error));
       return [start, end];
@@ -103,7 +98,6 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
     mapInstanceRef.current = map;
     setIsMapReady(true);
 
-    // ✅ Custom icons preserved
     const greenIcon = L.icon({
       iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iIzIyYzU1ZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
       iconSize: [24, 24],
@@ -174,7 +168,7 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
         }
       });
 
-            if (markersRef.current.length > 0) {
+      if (markersRef.current.length > 0) {
         const lastMarker = markersRef.current[markersRef.current.length - 1];
         if (markersRef.current.length > 1) {
           lastMarker.setIcon(blueIcon);
