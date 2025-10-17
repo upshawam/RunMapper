@@ -24,7 +24,7 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
   const roadsOverlayRef = useRef<L.TileLayer | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
 
-  // ✅ Updated: direct call to ORS with fallback
+  // ✅ Direct call to ORS with fallback
   const getRouteBetweenPoints = async (
     start: [number, number],
     end: [number, number]
@@ -36,7 +36,7 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImJjOWZhZmQ5MmY0ZDRhMjQ5ZjliYzIwMDNkNzY3MDllIiwiaCI6Im11cm11cjY0In0=" // 👈 replace with your real key
+            "Authorization": "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImJjOWZhZmQ5MmY0ZDRhMjQ5ZjliYzIwMDNkNzY3MDllIiwiaCI6Im11cm11cjY0In0="
           },
           body: JSON.stringify({
             coordinates: [
@@ -106,7 +106,58 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
     mapInstanceRef.current = map;
     setIsMapReady(true);
 
-    // … keep your marker, polyline, rebuildRoute, and calculateDistance logic unchanged …
+    // ✅ CLICK HANDLER
+    map.on('click', async (e: L.LeafletMouseEvent) => {
+      const point: RoutePoint = {
+        lat: e.latlng.lat,
+        lng: e.latlng.lng,
+        elevation: Math.floor(Math.random() * 200) + 50,
+      };
+
+      // Always push the point and drop a marker
+      routePointsRef.current.push(point);
+      const marker = L.marker([point.lat, point.lng]).addTo(map);
+      markersRef.current.push(marker);
+
+      // If there’s a previous point, draw a snapped (or fallback) line
+      if (routePointsRef.current.length > 1) {
+        const lastPoint = routePointsRef.current[routePointsRef.current.length - 2];
+        const routeCoords = await getRouteBetweenPoints(
+          [lastPoint.lat, lastPoint.lng],
+          [point.lat, point.lng]
+        );
+
+        if (polylineRef.current) {
+          const existingCoords = polylineRef.current.getLatLngs() as L.LatLng[];
+          const newCoords = [
+            ...existingCoords,
+            ...routeCoords.slice(1).map(c => L.latLng(c[0], c[1]))
+          ];
+          polylineRef.current.setLatLngs(newCoords);
+        } else {
+          polylineRef.current = L.polyline(routeCoords, {
+            color: '#3b82f6',
+            weight: 4,
+            opacity: 0.8,
+          }).addTo(map);
+        }
+      }
+
+      calculateDistance();
+    });
+
+    const calculateDistance = () => {
+      if (routePointsRef.current.length < 2 || !polylineRef.current) {
+        onRouteChange?.(routePointsRef.current, 0);
+        return;
+      }
+      const coords = polylineRef.current.getLatLngs() as L.LatLng[];
+      let totalDistance = 0;
+      for (let i = 0; i < coords.length - 1; i++) {
+        totalDistance += coords[i].distanceTo(coords[i + 1]);
+      }
+      onRouteChange?.(routePointsRef.current, totalDistance);
+    };
 
     return () => {
       map.remove();
