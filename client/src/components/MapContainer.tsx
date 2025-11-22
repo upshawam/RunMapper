@@ -14,15 +14,18 @@ type MapType =
   | 'hybrid'
   | 'esri-topo';
 
+type RoutingService = 'openrouteservice' | 'osrm' | 'mapbox' | 'thunderforest' | 'straight';
+
 interface MapContainerProps {
   onRouteChange?: (points: RoutePoint[], distance: number, elevations?: number[], elevationData?: {distance: number, elevation: number}[], fullCoords?: RoutePoint[]) => void;
   mapType?: MapType;
   className?: string;
   routePoints?: RoutePoint[];
   hoverPosition?: number | null;
+  routingService?: RoutingService;
 }
 
-const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChange, mapType = 'map', className = '', routePoints = [], hoverPosition }, ref) => {
+const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChange, mapType = 'map', className = '', routePoints = [], hoverPosition, routingService = 'openrouteservice' }, ref) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const routePointsRef = useRef<RoutePoint[]>([]);
@@ -36,7 +39,6 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
   const [isMapReady, setIsMapReady] = useState(false);
   const [isProcessingClick, setIsProcessingClick] = useState(false);
   const [hasShownNetworkWarning, setHasShownNetworkWarning] = useState(false);
-  const [routingMode, setRoutingMode] = useState<'smart' | 'straight'>('smart');
 
   // Define icons
   const greenIcon = L.icon({
@@ -57,81 +59,117 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
     iconAnchor: [12, 12],
   });
 
-  // ✅ Updated to call ORS directly with your API key
+  // ✅ Single-service routing based on selected service
   const getRouteBetweenPoints = async (start: [number, number], end: [number, number]): Promise<{coords: [number, number][], elevations: number[]}> => {
-    // If user has chosen straight-line routing, skip API call
-    if (routingMode === 'straight') {
+    // If straight-line routing is selected
+    if (routingService === 'straight') {
       return {
         coords: [start, end],
         elevations: [100, 100]
       };
     }
 
+    // Try the selected routing service
     try {
-      const response = await fetch(
-        "https://api.openrouteservice.org/v2/directions/foot-walking/geojson",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImJjOWZhZmQ5MmY0ZDRhMjQ5ZjliYzIwMDNkNzY3MDllIiwiaCI6Im11cm11cjY0In0="
-          },
-          body: JSON.stringify({
-            coordinates: [
-              [start[1], start[0]], // ORS expects [lng, lat]
-              [end[1], end[0]]
-            ],
-            elevation: true,
-            format: "geojson"
-          })
+      if (routingService === 'openrouteservice') {
+        const orsResponse = await fetch(
+          "https://api.openrouteservice.org/v2/directions/foot-walking/geojson",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImJjOWZhZmQ5MmY0ZDRhMjQ5ZjliYzIwMDNkNzY3MDllIiwiaCI6Im11cm11cjY0In0="
+            },
+            body: JSON.stringify({
+              coordinates: [
+                [start[1], start[0]], // ORS expects [lng, lat]
+                [end[1], end[0]]
+              ],
+              elevation: true,
+              format: "geojson"
+            })
+          }
+        );
+
+        if (orsResponse.ok) {
+          const data = await orsResponse.json();
+          const coords = data.features?.[0]?.geometry?.coordinates;
+          if (coords) {
+            // ORS returns [lng, lat, elevation]
+            const parsedCoords: [number, number][] = [];
+            const elevations: number[] = [];
+            
+            coords.forEach((coord: number[]) => {
+              parsedCoords.push([coord[1], coord[0]]); // [lat, lng]
+              elevations.push(coord[2] || 100); // elevation
+            });
+
+            return { coords: parsedCoords, elevations };
+          }
         }
-      );
+      } else if (routingService === 'osrm') {
+        const osrmResponse = await fetch(
+          `https://router.project-osrm.org/route/v1/foot/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`
+        );
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.warn('Routing API failed:', errorText);
-        // Automatically switch to straight-line mode on failure
-        setRoutingMode('straight');
-        if (!hasShownNetworkWarning) {
-          setHasShownNetworkWarning(true);
+        if (osrmResponse.ok) {
+          const data = await osrmResponse.json();
+          const route = data.routes?.[0];
+          if (route?.geometry?.coordinates) {
+            // OSRM returns [lng, lat] format
+            const coords: [number, number][] = route.geometry.coordinates.map((coord: number[]) => [coord[1], coord[0]]);
+            const elevations: number[] = new Array(coords.length).fill(100);
+            
+            return { coords, elevations };
+          }
         }
-        return {
-          coords: [start, end],
-          elevations: [100, 100]
-        };
+      } else if (routingService === 'mapbox') {
+        // Mapbox has a generous free tier (100k requests/month)
+        const MAPBOX_ACCESS_TOKEN = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoidXBzaGF3YW0iLCJhIjoiY2x6Z3B5Z3NqMDN5ZzJqcGJzZ3p5Z3p5In0.YOUR_REAL_TOKEN_HERE';
+        
+        if (!MAPBOX_ACCESS_TOKEN.includes('YOUR_REAL_TOKEN_HERE')) {
+          const mapboxResponse = await fetch(
+            `https://api.mapbox.com/directions/v5/mapbox/walking/${start[1]},${start[0]};${end[1]},${end[0]}?geometries=geojson&overview=full&steps=false&access_token=${MAPBOX_ACCESS_TOKEN}`
+          );
+
+          if (mapboxResponse.ok) {
+            const data = await mapboxResponse.json();
+            const route = data.routes?.[0];
+            if (route?.geometry?.coordinates) {
+              // Mapbox returns [lng, lat] format
+              const coords: [number, number][] = route.geometry.coordinates.map((coord: number[]) => [coord[1], coord[0]]);
+              const elevations: number[] = new Array(coords.length).fill(100);
+              
+              return { coords, elevations };
+            }
+          }
+        }
+      } else if (routingService === 'thunderforest') {
+        const thunderforestResponse = await fetch(
+          `https://api.thunderforest.com/v1/routes?origin=${start[0]},${start[1]}&destination=${end[0]},${end[1]}&profile=walking&format=geojson&apikey=`
+        );
+
+        if (thunderforestResponse.ok) {
+          const data = await thunderforestResponse.json();
+          const coords = data.features?.[0]?.geometry?.coordinates;
+          if (coords) {
+            const parsedCoords: [number, number][] = coords.map((coord: number[]) => [coord[1], coord[0]]);
+            const elevations: number[] = new Array(parsedCoords.length).fill(100);
+            
+            return { coords: parsedCoords, elevations };
+          }
+        }
       }
-
-      const data = await response.json();
-      const coords = data.features?.[0]?.geometry?.coordinates;
-      if (!coords) {
-        console.warn('Invalid routing response format');
-        return {
-          coords: [start, end],
-          elevations: [100, 100]
-        };
-      }
-
-      // ORS returns [lng, lat, elevation]
-      const parsedCoords: [number, number][] = [];
-      const elevations: number[] = [];
-      
-      coords.forEach((coord: number[]) => {
-        parsedCoords.push([coord[1], coord[0]]); // [lat, lng]
-        elevations.push(coord[2] || 100); // elevation
-      });
-
-      return { coords: parsedCoords, elevations };
     } catch (error) {
-      // Automatically switch to straight-line mode on network errors
-      setRoutingMode('straight');
-      if (!hasShownNetworkWarning) {
-        setHasShownNetworkWarning(true);
-      }
-      return {
-        coords: [start, end],
-        elevations: [100, 100]
-      };
+      console.warn(`${routingService} routing failed:`, error);
     }
+
+    // Fallback to straight-line routing if selected service fails
+    console.warn(`Selected routing service (${routingService}) failed, falling back to straight lines`);
+    return {
+      coords: [start, end],
+      elevations: [100, 100]
+    };
   };
 
   const getElevation = async (lat: number, lng: number): Promise<number> => {
@@ -596,21 +634,7 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
           <div className="flex items-center gap-2">
             <span>⚠️</span>
             <div className="flex flex-col gap-1">
-              <span>Network restrictions detected - using straight-line routing</span>
-              <div className="flex gap-2 text-xs">
-                <button 
-                  onClick={() => setRoutingMode('smart')}
-                  className={`px-2 py-1 rounded ${routingMode === 'smart' ? 'bg-yellow-200' : 'bg-yellow-100 hover:bg-yellow-200'}`}
-                >
-                  Try Smart Routing
-                </button>
-                <button 
-                  onClick={() => setRoutingMode('straight')}
-                  className={`px-2 py-1 rounded ${routingMode === 'straight' ? 'bg-yellow-200' : 'bg-yellow-100 hover:bg-yellow-200'}`}
-                >
-                  Straight Lines
-                </button>
-              </div>
+              <span>Network restrictions detected - some routing services may not be available</span>
             </div>
           </div>
         </div>

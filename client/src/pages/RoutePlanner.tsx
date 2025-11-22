@@ -8,12 +8,15 @@ import ExportDialog from '@/components/ExportDialog';
 import RouteActions from '@/components/RouteActions';
 import ThemeToggle from '@/components/ThemeToggle';
 import LocationSearch from '@/components/LocationSearch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface RoutePoint {
   lat: number;
   lng: number;
   elevation?: number;
 }
+
+type RoutingService = 'openrouteservice' | 'osrm' | 'mapbox' | 'thunderforest' | 'straight';
 
 export default function RoutePlanner() {
   const [routePoints, setRoutePoints] = useState<RoutePoint[]>([]);
@@ -24,6 +27,7 @@ export default function RoutePlanner() {
   const [elevationData, setElevationData] = useState<{distance: number, elevation: number}[]>([]);
   const [hoverPosition, setHoverPosition] = useState<number | null>(null);
   const [fullRouteCoords, setFullRouteCoords] = useState<RoutePoint[]>([]);
+  const [routingService, setRoutingService] = useState<RoutingService>('openrouteservice');
 
   const handleRouteChange = (points: RoutePoint[], newDistance: number, elevations?: number[], elevationChartData?: {distance: number, elevation: number}[], fullCoords?: RoutePoint[]) => {
     setRoutePoints(points);
@@ -88,6 +92,7 @@ export default function RoutePlanner() {
         mapType={mapType}
         routePoints={routePoints}
         hoverPosition={hoverPosition}
+        routingService={routingService}
         ref={mapRef}
       />
 
@@ -117,6 +122,18 @@ export default function RoutePlanner() {
             mapType={mapType}
             onToggle={setMapType}
           />
+          <Select value={routingService} onValueChange={(value: RoutingService) => setRoutingService(value)}>
+            <SelectTrigger className="w-48 bg-white shadow-lg">
+              <SelectValue placeholder="Select routing service" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="openrouteservice">OpenRouteService</SelectItem>
+              <SelectItem value="osrm">OSRM</SelectItem>
+              <SelectItem value="mapbox">Mapbox</SelectItem>
+              <SelectItem value="thunderforest">Thunderforest</SelectItem>
+              <SelectItem value="straight">Straight Lines</SelectItem>
+            </SelectContent>
+          </Select>
           <RouteActions 
             onUndo={handleUndo}
             onClear={handleClear}
