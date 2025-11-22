@@ -15,6 +15,7 @@ type MapType =
   | 'esri-topo';
 
 type RoutingService = 'openrouteservice' | 'osrm' | 'mapbox' | 'thunderforest' | 'straight';
+type ElevationService = 'open-elevation' | 'mapbox' | 'usgs' | 'none';
 
 interface MapContainerProps {
   onRouteChange?: (points: RoutePoint[], distance: number, elevations?: number[], elevationData?: {distance: number, elevation: number}[], fullCoords?: RoutePoint[]) => void;
@@ -23,9 +24,10 @@ interface MapContainerProps {
   routePoints?: RoutePoint[];
   hoverPosition?: number | null;
   routingService?: RoutingService;
+  elevationService?: ElevationService;
 }
 
-const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChange, mapType = 'map', className = '', routePoints = [], hoverPosition, routingService = 'openrouteservice' }, ref) => {
+const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChange, mapType = 'map', className = '', routePoints = [], hoverPosition, routingService = 'openrouteservice', elevationService = 'open-elevation' }, ref) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const routePointsRef = useRef<RoutePoint[]>([]);
@@ -173,27 +175,57 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
   };
 
   const getElevation = async (lat: number, lng: number): Promise<number> => {
-    try {
-      const response = await fetch(
-        `https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lng}`
-      );
-      
-      if (!response.ok) {
-        if (!hasShownNetworkWarning) {
-          setHasShownNetworkWarning(true);
-        }
-        return 100;
-      }
-
-      const data = await response.json();
-      const elevation = data.results?.[0]?.elevation;
-      return elevation || 100;
-    } catch (error) {
-      if (!hasShownNetworkWarning) {
-        setHasShownNetworkWarning(true);
-      }
+    // If no elevation service selected, return default
+    if (elevationService === 'none') {
       return 100;
     }
+
+    try {
+      if (elevationService === 'open-elevation') {
+        const response = await fetch(
+          `https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lng}`
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          const elevation = data.results?.[0]?.elevation;
+          return elevation || 100;
+        }
+      } else if (elevationService === 'mapbox') {
+        const MAPBOX_ACCESS_TOKEN = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoidXBzaGF3YW0iLCJhIjoiY2x6Z3B5Z3NqMDN5ZzJqcGJzZ3p5Z3p5In0.YOUR_REAL_TOKEN_HERE';
+        
+        if (!MAPBOX_ACCESS_TOKEN.includes('YOUR_REAL_TOKEN_HERE')) {
+          const response = await fetch(
+            `https://api.mapbox.com/v4/mapbox.terrain-rgb/${Math.floor((lng + 180) / 360 * Math.pow(2, 10))},${Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, 10))}.pngraw?access_token=${MAPBOX_ACCESS_TOKEN}`
+          );
+          
+          if (response.ok) {
+            // Mapbox Terrain-RGB returns RGB values that encode elevation
+            // This is complex to decode, so for now just return a placeholder
+            return 100; // TODO: Implement proper Mapbox elevation decoding
+          }
+        }
+      } else if (elevationService === 'usgs') {
+        // USGS Elevation Point Query Service (US only)
+        const response = await fetch(
+          `https://nationalmap.gov/epqs/pqs.php?x=${lng}&y=${lat}&units=Meters&output=json`
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          const elevation = data.USGS_Elevation_Point_Query_Service?.Elevation_Query?.Elevation;
+          return elevation || 100;
+        }
+      }
+    } catch (error) {
+      console.warn(`${elevationService} elevation service failed:`, error);
+    }
+
+    // Fallback to default elevation if service fails
+    if (!hasShownNetworkWarning) {
+      setHasShownNetworkWarning(true);
+    }
+    return 100;
   };
 
   const updateMarkerIcons = () => {

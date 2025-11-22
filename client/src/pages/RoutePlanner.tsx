@@ -17,6 +17,7 @@ interface RoutePoint {
 }
 
 type RoutingService = 'openrouteservice' | 'osrm' | 'mapbox' | 'thunderforest' | 'straight';
+type ElevationService = 'open-elevation' | 'mapbox' | 'usgs' | 'none';
 
 export default function RoutePlanner() {
   const [routePoints, setRoutePoints] = useState<RoutePoint[]>([]);
@@ -28,6 +29,7 @@ export default function RoutePlanner() {
   const [hoverPosition, setHoverPosition] = useState<number | null>(null);
   const [fullRouteCoords, setFullRouteCoords] = useState<RoutePoint[]>([]);
   const [routingService, setRoutingService] = useState<RoutingService>('openrouteservice');
+  const [elevationService, setElevationService] = useState<ElevationService>('open-elevation');
 
   const handleRouteChange = (points: RoutePoint[], newDistance: number, elevations?: number[], elevationChartData?: {distance: number, elevation: number}[], fullCoords?: RoutePoint[]) => {
     setRoutePoints(points);
@@ -93,6 +95,7 @@ export default function RoutePlanner() {
         routePoints={routePoints}
         hoverPosition={hoverPosition}
         routingService={routingService}
+        elevationService={elevationService}
         ref={mapRef}
       />
 
@@ -132,6 +135,17 @@ export default function RoutePlanner() {
               <SelectItem value="mapbox">Mapbox</SelectItem>
               <SelectItem value="thunderforest">Thunderforest</SelectItem>
               <SelectItem value="straight">Straight Lines</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={elevationService} onValueChange={(value: ElevationService) => setElevationService(value)}>
+            <SelectTrigger className="w-44 bg-white shadow-lg">
+              <SelectValue placeholder="Select elevation service" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="open-elevation">Open-Elevation</SelectItem>
+              <SelectItem value="mapbox">Mapbox Elevation</SelectItem>
+              <SelectItem value="usgs">USGS Elevation</SelectItem>
+              <SelectItem value="none">No Elevation</SelectItem>
             </SelectContent>
           </Select>
           <RouteActions 
