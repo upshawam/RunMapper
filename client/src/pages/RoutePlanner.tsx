@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import MapContainer from '@/components/MapContainer';
 import RouteStats from '@/components/RouteStats';
 import MapControls from '@/components/MapControls';
@@ -7,6 +7,7 @@ import ElevationChart from '@/components/ElevationChart';
 import ExportDialog from '@/components/ExportDialog';
 import RouteActions from '@/components/RouteActions';
 import ThemeToggle from '@/components/ThemeToggle';
+import LocationSearch from '@/components/LocationSearch';
 
 interface RoutePoint {
   lat: number;
@@ -65,11 +66,23 @@ export default function RoutePlanner() {
     return loss + (diff < 0 ? Math.abs(diff) : 0);
   }, 0);
 
+  const [showElevation, setShowElevation] = useState(true);
+  const mapRef = useRef<any>(null);
+
+  const handleLocationSelect = (lat: number, lon: number) => {
+    // This will be handled by MapContainer's geolocation effect
+    if (mapRef.current) {
+      mapRef.current.setView([lat, lon], 13);
+    }
+  };
+
   return (
     <div className="relative h-screen w-full overflow-hidden">
       <MapContainer 
         onRouteChange={handleRouteChange}
         mapType={mapType}
+        routePoints={routePoints}
+        ref={mapRef}
       />
 
       <div className="absolute top-4 left-4 z-[1000] space-y-4">
@@ -82,41 +95,56 @@ export default function RoutePlanner() {
         />
       </div>
 
-      <div className="absolute top-4 right-4 z-[1000]">
+      <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
         <MapControls 
           onZoomIn={() => console.log('Zoom in')}
           onZoomOut={() => console.log('Zoom out')}
           onLocate={() => console.log('Locate')}
           onFitRoute={() => console.log('Fit route')}
         />
-      </div>
-
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex gap-2">
-        <MapTypeToggle 
-          mapType={mapType}
-          onToggle={setMapType}
-        />
         <ThemeToggle />
       </div>
 
-      <div className="absolute bottom-4 left-4 right-4 z-[1000] space-y-4">
-        <ElevationChart 
-          data={elevationData}
-          unit={unit}
-        />
-        
-        <div className="flex justify-between items-center gap-4">
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex flex-col gap-3 items-center">
+        <div className="flex gap-2">
+          <MapTypeToggle 
+            mapType={mapType}
+            onToggle={setMapType}
+          />
           <RouteActions 
             onUndo={handleUndo}
             onClear={handleClear}
             canUndo={routePoints.length > 0}
           />
-          
           <ExportDialog 
             routePoints={routePoints}
           />
         </div>
+        <div className="w-96">
+          <LocationSearch onLocationSelect={handleLocationSelect} />
+        </div>
       </div>
+
+      {showElevation && (
+        <div className="absolute bottom-4 left-4 right-4 z-[1000]">
+          <ElevationChart 
+            data={elevationData}
+            unit={unit}
+            onToggleCollapse={() => setShowElevation(!showElevation)}
+          />
+        </div>
+      )}
+      
+      {!showElevation && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000]">
+          <button
+            onClick={() => setShowElevation(true)}
+            className="bg-white shadow-lg px-4 py-2 rounded-lg border-2 hover:bg-gray-50 transition-colors text-sm font-medium"
+          >
+            Show Elevation Profile
+          </button>
+        </div>
+      )}
     </div>
   );
 }

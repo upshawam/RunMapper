@@ -9,9 +9,10 @@ interface ElevationPoint {
 interface ElevationChartProps {
   data: ElevationPoint[];
   unit: 'mi' | 'km';
+  onToggleCollapse?: () => void;
 }
 
-export default function ElevationChart({ data, unit }: ElevationChartProps) {
+export default function ElevationChart({ data, unit, onToggleCollapse }: ElevationChartProps) {
   const elevationUnit = unit === 'mi' ? 'ft' : 'm';
   
   const formattedData = data.map(point => ({
@@ -25,7 +26,7 @@ export default function ElevationChart({ data, unit }: ElevationChartProps) {
 
   if (data.length === 0) {
     return (
-      <Card className="backdrop-blur-lg bg-card/95 shadow-lg p-6" data-testid="card-elevation-chart">
+      <Card className="bg-white shadow-lg p-6 border-2" data-testid="card-elevation-chart">
         <h3 className="text-lg font-semibold mb-2">Elevation Profile</h3>
         <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">
           Click on the map to create a route
@@ -35,8 +36,18 @@ export default function ElevationChart({ data, unit }: ElevationChartProps) {
   }
 
   return (
-    <Card className="backdrop-blur-lg bg-card/95 shadow-lg p-6" data-testid="card-elevation-chart">
-      <h3 className="text-lg font-semibold mb-4">Elevation Profile</h3>
+    <Card className="bg-white shadow-lg p-6 border-2" data-testid="card-elevation-chart">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-semibold">Elevation Profile</h3>
+        {onToggleCollapse && (
+          <button
+            onClick={onToggleCollapse}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Hide
+          </button>
+        )}
+      </div>
       <ResponsiveContainer width="100%" height={160}>
         <AreaChart data={formattedData}>
           <defs>

@@ -8,7 +8,7 @@ interface MapTypeToggleProps {
 
 export default function MapTypeToggle({ mapType, onToggle }: MapTypeToggleProps) {
   return (
-    <div className="flex gap-1 p-1 rounded-lg bg-card/95 backdrop-blur-lg shadow-lg" data-testid="container-map-type-toggle">
+    <div className="flex gap-1 p-1 rounded-lg bg-white shadow-lg border-2" data-testid="container-map-type-toggle">
       <Button
         size="sm"
         variant={mapType === 'map' ? 'default' : 'ghost'}

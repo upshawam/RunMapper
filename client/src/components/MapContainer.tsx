@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -12,9 +12,10 @@ interface MapContainerProps {
   onRouteChange?: (points: RoutePoint[], distance: number) => void;
   mapType?: 'map' | 'satellite';
   className?: string;
+  routePoints?: RoutePoint[];
 }
 
-export default function MapContainer({ onRouteChange, mapType = 'map', className = '' }: MapContainerProps) {
+const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChange, mapType = 'map', className = '', routePoints = [] }, ref) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const routePointsRef = useRef<RoutePoint[]>([]);
@@ -23,6 +24,25 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
   const satelliteLayerRef = useRef<L.TileLayer | null>(null);
   const roadsOverlayRef = useRef<L.TileLayer | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
+
+  // Define icons
+  const greenIcon = L.icon({
+    iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iIzIyYzU1ZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+
+  const blueIcon = L.icon({
+    iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iIzM4OTVmZiIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+
+  const redIcon = L.icon({
+    iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iI2VmNDQ0NCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
 
   // ✅ Updated to call ORS directly with your API key
   const getRouteBetweenPoints = async (start: [number, number], end: [number, number]): Promise<[number, number][]> => {
@@ -39,7 +59,9 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
             coordinates: [
               [start[1], start[0]], // ORS expects [lng, lat]
               [end[1], end[0]]
-            ]
+            ],
+            elevation: true,
+            format: "geojson"
           })
         }
       );
@@ -62,6 +84,38 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
       console.error('Routing error:', error instanceof Error ? error.message : String(error));
       return [start, end];
     }
+  };
+
+  const getElevation = async (lat: number, lng: number): Promise<number> => {
+    try {
+      const response = await fetch(
+        `https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lng}`
+      );
+      
+      if (!response.ok) {
+        console.warn('Elevation API failed, using default elevation');
+        return 100; // Default elevation
+      }
+
+      const data = await response.json();
+      const elevation = data.results?.[0]?.elevation;
+      return elevation || 100;
+    } catch (error) {
+      console.error('Elevation error:', error);
+      return 100; // Default elevation
+    }
+  };
+
+  const updateMarkerIcons = () => {
+    markersRef.current.forEach((marker, idx) => {
+      if (idx === 0) {
+        marker.setIcon(greenIcon);
+      } else if (idx === markersRef.current.length - 1) {
+        marker.setIcon(redIcon);
+      } else {
+        marker.setIcon(blueIcon);
+      }
+    });
   };
 
   useEffect(() => {
@@ -103,6 +157,18 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
     mapInstanceRef.current = map;
     setIsMapReady(true);
 
+    // Try to get user's location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          map.setView([position.coords.latitude, position.coords.longitude], 13);
+        },
+        (error) => {
+          console.log('Geolocation error:', error);
+        }
+      );
+    }
+
     // ✅ Custom icons preserved
     const greenIcon = L.icon({
       iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iIzIyYzU1ZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
@@ -124,10 +190,14 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
 
     map.on('click', async (e: L.LeafletMouseEvent) => {
       console.log('Map clicked at:', e.latlng);
+      
+      // Get elevation for the clicked point
+      const elevation = await getElevation(e.latlng.lat, e.latlng.lng);
+      
       const point: RoutePoint = {
         lat: e.latlng.lat,
         lng: e.latlng.lng,
-        elevation: Math.floor(Math.random() * 200) + 50,
+        elevation: elevation,
       };
 
       console.log('New point:', point);
@@ -160,11 +230,7 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
       routePointsRef.current.push(point);
       console.log('Updated route points:', routePointsRef.current);
 
-      const isLast = routePointsRef.current.length > 1;
-      const iconToUse = isFirst ? greenIcon : isLast ? redIcon : blueIcon;
-
       const marker = L.marker([point.lat, point.lng], { 
-        icon: iconToUse,
         draggable: true 
       }).addTo(map);
 
@@ -174,25 +240,24 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
         const idx = markersRef.current.indexOf(marker);
         if (idx !== -1) {
           const newLatLng = marker.getLatLng();
+          const newElevation = await getElevation(newLatLng.lat, newLatLng.lng);
           routePointsRef.current[idx] = {
             ...routePointsRef.current[idx],
             lat: newLatLng.lat,
             lng: newLatLng.lng,
+            elevation: newElevation,
           };
           console.log('Marker dragged to:', newLatLng);
           await rebuildRoute();
         }
       });
 
-      if (markersRef.current.length > 0) {
-        const lastMarker = markersRef.current[markersRef.current.length - 1];
-        if (markersRef.current.length > 1) {
-          lastMarker.setIcon(blueIcon);
-        }
-      }
-
       markersRef.current.push(marker);
       console.log('Updated markers:', markersRef.current);
+      
+      // Update all marker icons based on their position
+      updateMarkerIcons();
+      
       calculateDistance();
     });
 
@@ -292,6 +357,109 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
     }
   }, [mapType, isMapReady]);
 
+  // Sync with external routePoints changes (for undo/clear)
+  useEffect(() => {
+    if (!mapInstanceRef.current || !isMapReady) return;
+
+    const map = mapInstanceRef.current;
+
+    // If external routePoints is shorter than internal, remove markers and rebuild
+    if (routePoints.length < routePointsRef.current.length) {
+      // Remove excess markers
+      while (markersRef.current.length > routePoints.length) {
+        const marker = markersRef.current.pop();
+        if (marker) {
+          map.removeLayer(marker);
+        }
+      }
+
+      // Update internal state
+      routePointsRef.current = [...routePoints];
+
+      // Rebuild polyline
+      if (polylineRef.current) {
+        map.removeLayer(polylineRef.current);
+        polylineRef.current = null;
+      }
+
+      if (routePoints.length >= 2) {
+        (async () => {
+          let allCoords: [number, number][] = [];
+          
+          for (let i = 0; i < routePoints.length - 1; i++) {
+            const start = routePoints[i];
+            const end = routePoints[i + 1];
+            const routeCoords = await getRouteBetweenPoints(
+              [start.lat, start.lng],
+              [end.lat, end.lng]
+            );
+            
+            if (i === 0) {
+              allCoords = [...routeCoords];
+            } else {
+              allCoords = [...allCoords, ...routeCoords.slice(1)];
+            }
+          }
+
+          polylineRef.current = L.polyline(allCoords, {
+            color: '#3b82f6',
+            weight: 4,
+            opacity: 0.8,
+          }).addTo(map);
+
+          // Update marker icons
+          markersRef.current.forEach((marker, idx) => {
+            if (idx === 0) {
+              marker.setIcon(greenIcon);
+            } else if (idx === routePoints.length - 1) {
+              marker.setIcon(redIcon);
+            } else {
+              marker.setIcon(blueIcon);
+            }
+          });
+
+          // Recalculate distance
+          if (polylineRef.current) {
+            const coords = polylineRef.current.getLatLngs() as L.LatLng[];
+            let totalDistance = 0;
+            
+            for (let i = 0; i < coords.length - 1; i++) {
+              totalDistance += coords[i].distanceTo(coords[i + 1]);
+            }
+
+            onRouteChange?.(routePointsRef.current, totalDistance);
+          }
+        })();
+      } else if (routePoints.length === 0) {
+        onRouteChange?.([], 0);
+      } else {
+        onRouteChange?.(routePointsRef.current, 0);
+      }
+    }
+
+    // Define icons for the effect
+    const greenIcon = L.icon({
+      iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iIzIyYzU1ZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12],
+    });
+
+    const blueIcon = L.icon({
+      iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iIzM4OTVmZiIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12],
+    });
+
+    const redIcon = L.icon({
+      iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iI2VmNDQ0NCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12],
+    });
+  }, [routePoints, isMapReady, onRouteChange]);
+
+  // Expose map instance to parent
+  useImperativeHandle(ref, () => mapInstanceRef.current!);
+
   return (
     <div 
       ref={mapRef} 
@@ -299,4 +467,8 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
       data-testid="map-container"
     />
   );
-}
+});
+
+MapContainer.displayName = 'MapContainer';
+
+export default MapContainer;

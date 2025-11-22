@@ -29,7 +29,7 @@ export default function RouteStats({
     : elevationLoss;
 
   return (
-    <Card className="backdrop-blur-lg bg-card/95 shadow-2xl p-6" data-testid="card-route-stats">
+    <Card className="bg-white shadow-2xl p-6 border-2" data-testid="card-route-stats">
       <div className="space-y-4">
         <div>
           <div className="flex items-baseline gap-2">
