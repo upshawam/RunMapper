@@ -10,12 +10,43 @@ interface ElevationChartProps {
   data: ElevationPoint[];
   unit: 'mi' | 'km';
   onToggleCollapse?: () => void;
+  onHoverPosition?: (distance: number | null) => void;
 }
 
-export default function ElevationChart({ data, unit, onToggleCollapse }: ElevationChartProps) {
+export default function ElevationChart({ data, unit, onToggleCollapse, onHoverPosition }: ElevationChartProps) {
   const elevationUnit = unit === 'mi' ? 'ft' : 'm';
   
-  const formattedData = data.map(point => ({
+  // Smooth the elevation data to reduce noise
+  const smoothData = (rawData: ElevationPoint[]): ElevationPoint[] => {
+    if (rawData.length < 3) return rawData;
+    
+    const smoothed: ElevationPoint[] = [];
+    const windowSize = 3; // Simple moving average window
+    
+    for (let i = 0; i < rawData.length; i++) {
+      let sum = 0;
+      let count = 0;
+      
+      // Average over window around current point
+      for (let j = Math.max(0, i - Math.floor(windowSize / 2)); 
+           j <= Math.min(rawData.length - 1, i + Math.floor(windowSize / 2)); 
+           j++) {
+        sum += rawData[j].elevation;
+        count++;
+      }
+      
+      smoothed.push({
+        distance: rawData[i].distance,
+        elevation: sum / count
+      });
+    }
+    
+    return smoothed;
+  };
+  
+  const smoothedData = smoothData(data);
+  
+  const formattedData = smoothedData.map(point => ({
     distance: unit === 'mi' 
       ? (point.distance * 0.000621371).toFixed(2)
       : (point.distance / 1000).toFixed(2),
@@ -23,6 +54,18 @@ export default function ElevationChart({ data, unit, onToggleCollapse }: Elevati
       ? Math.round(point.elevation * 3.28084)
       : point.elevation,
   }));
+
+  // Calculate the actual elevation range for better Y-axis scaling
+  const elevations = formattedData.map(d => parseFloat(d.elevation.toString()));
+  const minElevation = Math.min(...elevations);
+  const maxElevation = Math.max(...elevations);
+  const elevationRange = maxElevation - minElevation;
+  
+  // Set domain with padding but focused on actual range
+  const yAxisDomain = [
+    Math.max(0, minElevation - elevationRange * 0.1), // Small padding below, but not below 0
+    maxElevation + elevationRange * 0.1 // Small padding above
+  ];
 
   if (data.length === 0) {
     return (
@@ -49,7 +92,24 @@ export default function ElevationChart({ data, unit, onToggleCollapse }: Elevati
         )}
       </div>
       <ResponsiveContainer width="100%" height={160}>
-        <AreaChart data={formattedData}>
+        <AreaChart 
+          data={formattedData}
+          onMouseMove={(e) => {
+            if (e && e.activeLabel && onHoverPosition) {
+              // Convert the activeLabel (formatted distance) back to actual distance
+              const formattedDistance = parseFloat(e.activeLabel);
+              const actualDistance = unit === 'mi' 
+                ? formattedDistance / 0.000621371 
+                : formattedDistance * 1000;
+              onHoverPosition(actualDistance);
+            }
+          }}
+          onMouseLeave={() => {
+            if (onHoverPosition) {
+              onHoverPosition(null);
+            }
+          }}
+        >
           <defs>
             <linearGradient id="elevationGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3}/>
@@ -62,6 +122,7 @@ export default function ElevationChart({ data, unit, onToggleCollapse }: Elevati
             stroke="hsl(var(--border))"
           />
           <YAxis 
+            domain={yAxisDomain}
             tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
             stroke="hsl(var(--border))"
             label={{ 
@@ -86,6 +147,7 @@ export default function ElevationChart({ data, unit, onToggleCollapse }: Elevati
             stroke="hsl(var(--chart-1))"
             strokeWidth={2}
             fill="url(#elevationGradient)"
+            dot={false}
           />
         </AreaChart>
       </ResponsiveContainer>

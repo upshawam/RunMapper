@@ -9,13 +9,14 @@ interface RoutePoint {
 }
 
 interface MapContainerProps {
-  onRouteChange?: (points: RoutePoint[], distance: number, elevations?: number[]) => void;
+  onRouteChange?: (points: RoutePoint[], distance: number, elevations?: number[], elevationData?: {distance: number, elevation: number}[]) => void;
   mapType?: 'map' | 'satellite';
   className?: string;
   routePoints?: RoutePoint[];
+  hoverPosition?: number | null;
 }
 
-const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChange, mapType = 'map', className = '', routePoints = [] }, ref) => {
+const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChange, mapType = 'map', className = '', routePoints = [], hoverPosition }, ref) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const routePointsRef = useRef<RoutePoint[]>([]);
@@ -25,7 +26,9 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
   const roadsOverlayRef = useRef<L.TileLayer | null>(null);
   const segmentLengthsRef = useRef<number[]>([]); // Store how many coords each segment adds
   const routeElevationsRef = useRef<number[]>([]); // Store all elevations along the route
+  const hoverMarkerRef = useRef<L.Marker | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
+  const [isProcessingClick, setIsProcessingClick] = useState(false);
 
   // Define icons
   const greenIcon = L.icon({
@@ -191,6 +194,9 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
     }
 
     map.on('click', async (e: L.LeafletMouseEvent) => {
+      if (isProcessingClick) return; // Prevent multiple clicks while processing
+      
+      setIsProcessingClick(true);
       console.log('Map clicked at:', e.latlng);
       
       // Get elevation for the clicked point
@@ -264,14 +270,14 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
 
       markersRef.current.push(marker);
       console.log('Updated markers:', markersRef.current);
-      
+
       // Update all marker icons based on their position
       updateMarkerIcons();
       
       calculateDistance();
-    });
-
-    const rebuildRoute = async () => {
+      
+      setIsProcessingClick(false);
+    });    const rebuildRoute = async () => {
       if (polylineRef.current) {
         map.removeLayer(polylineRef.current);
         polylineRef.current = null;
@@ -319,23 +325,36 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
 
     const calculateDistance = () => {
       if (routePointsRef.current.length < 2) {
-        onRouteChange?.(routePointsRef.current, 0, []);
+        onRouteChange?.(routePointsRef.current, 0, [], []);
         return;
       }
 
       if (!polylineRef.current) {
-        onRouteChange?.(routePointsRef.current, 0, []);
+        onRouteChange?.(routePointsRef.current, 0, [], []);
         return;
       }
 
       const coords = polylineRef.current.getLatLngs() as L.LatLng[];
       let totalDistance = 0;
       
-      for (let i = 0; i < coords.length - 1; i++) {
-        totalDistance += coords[i].distanceTo(coords[i + 1]);
-      }
+      // Calculate cumulative distances for each coordinate
+      const elevationData: {distance: number, elevation: number}[] = [];
+      let cumulativeDistance = 0;
+      
+      coords.forEach((coord, index) => {
+        if (index > 0) {
+          cumulativeDistance += coords[index - 1].distanceTo(coord);
+        }
+        elevationData.push({
+          distance: cumulativeDistance,
+          elevation: routeElevationsRef.current[index] || 0
+        });
+        if (index < coords.length - 1) {
+          totalDistance += coord.distanceTo(coords[index + 1]);
+        }
+      });
 
-      onRouteChange?.(routePointsRef.current, totalDistance, routeElevationsRef.current);
+      onRouteChange?.(routePointsRef.current, totalDistance, routeElevationsRef.current, elevationData);
     };
 
     return () => {
@@ -421,12 +440,27 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       if (routePoints.length >= 2 && polylineRef.current) {
         const coords = polylineRef.current.getLatLngs() as L.LatLng[];
         let totalDistance = 0;
-        for (let i = 0; i < coords.length - 1; i++) {
-          totalDistance += coords[i].distanceTo(coords[i + 1]);
-        }
-        onRouteChange?.(routePointsRef.current, totalDistance);
+        
+        // Calculate cumulative distances for each coordinate
+        const elevationData: {distance: number, elevation: number}[] = [];
+        let cumulativeDistance = 0;
+        
+        coords.forEach((coord, index) => {
+          if (index > 0) {
+            cumulativeDistance += coords[index - 1].distanceTo(coord);
+          }
+          elevationData.push({
+            distance: cumulativeDistance,
+            elevation: routeElevationsRef.current[index] || 0
+          });
+          if (index < coords.length - 1) {
+            totalDistance += coord.distanceTo(coords[index + 1]);
+          }
+        });
+        
+        onRouteChange?.(routePointsRef.current, totalDistance, routeElevationsRef.current, elevationData);
       } else {
-        onRouteChange?.(routePointsRef.current, 0);
+        onRouteChange?.(routePointsRef.current, 0, [], []);
       }
     } else if (routePoints.length === 0 && routePointsRef.current.length > 0) {
       // Clear all
@@ -443,9 +477,60 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       routePointsRef.current = [];
       segmentLengthsRef.current = [];
       routeElevationsRef.current = [];
-      onRouteChange?.([], 0, []);
+      onRouteChange?.([], 0, [], []);
     }
   }, [routePoints, isMapReady, onRouteChange]);
+
+  // Handle elevation chart hover position
+  useEffect(() => {
+    if (!mapInstanceRef.current || !isMapReady || !polylineRef.current) return;
+
+    const map = mapInstanceRef.current;
+
+    if (hoverPosition !== null && routeElevationsRef.current.length > 0) {
+      // TypeScript needs explicit check
+      if (typeof hoverPosition !== 'number') return;
+      
+      // Find the closest coordinate to the hover position
+      const coords = polylineRef.current.getLatLngs() as L.LatLng[];
+      let closestIndex = 0;
+      let minDistance = Math.abs(0 - hoverPosition);
+
+      // Find the coordinate closest to the hover distance
+      let cumulativeDistance = 0;
+      for (let i = 1; i < coords.length; i++) {
+        cumulativeDistance += coords[i - 1].distanceTo(coords[i]);
+        const distanceDiff = Math.abs(cumulativeDistance - hoverPosition);
+        if (distanceDiff < minDistance) {
+          minDistance = distanceDiff;
+          closestIndex = i;
+        }
+      }
+
+      const hoverCoord = coords[closestIndex];
+
+      // Create or update hover marker
+      if (hoverMarkerRef.current) {
+        hoverMarkerRef.current.setLatLng(hoverCoord);
+      } else {
+        const hoverIcon = L.divIcon({
+          className: 'hover-marker',
+          html: '<div style="background-color: #ef4444; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);"></div>',
+          iconSize: [12, 12],
+          iconAnchor: [6, 6]
+        });
+        hoverMarkerRef.current = L.marker(hoverCoord, {
+          icon: hoverIcon
+        }).addTo(map);
+      }
+    } else {
+      // Remove hover marker when not hovering
+      if (hoverMarkerRef.current) {
+        map.removeLayer(hoverMarkerRef.current);
+        hoverMarkerRef.current = null;
+      }
+    }
+  }, [hoverPosition, isMapReady]);
 
   // Expose map instance to parent
   useImperativeHandle(ref, () => mapInstanceRef.current!);
@@ -453,9 +538,16 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
   return (
     <div 
       ref={mapRef} 
-      className={`w-full h-full ${className}`}
+      className={`w-full h-full ${className} relative`}
+      style={{ cursor: isProcessingClick ? 'wait' : 'crosshair' }}
       data-testid="map-container"
-    />
+    >
+      {isProcessingClick && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-white/90 px-3 py-1 rounded-lg shadow-lg text-sm font-medium text-gray-700">
+          Calculating route...
+        </div>
+      )}
+    </div>
   );
 });
 

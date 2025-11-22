@@ -21,12 +21,17 @@ export default function RoutePlanner() {
   const [unit, setUnit] = useState<'mi' | 'km'>('mi');
   const [mapType, setMapType] = useState<'map' | 'satellite'>('map');
   const [routeElevations, setRouteElevations] = useState<number[]>([]);
+  const [elevationData, setElevationData] = useState<{distance: number, elevation: number}[]>([]);
+  const [hoverPosition, setHoverPosition] = useState<number | null>(null);
 
-  const handleRouteChange = (points: RoutePoint[], newDistance: number, elevations?: number[]) => {
+  const handleRouteChange = (points: RoutePoint[], newDistance: number, elevations?: number[], elevationChartData?: {distance: number, elevation: number}[]) => {
     setRoutePoints(points);
     setDistance(newDistance);
     if (elevations) {
       setRouteElevations(elevations);
+    }
+    if (elevationChartData) {
+      setElevationData(elevationChartData);
     }
   };
 
@@ -41,20 +46,11 @@ export default function RoutePlanner() {
   const handleClear = () => {
     setRoutePoints([]);
     setRouteElevations([]);
+    setElevationData([]);
     setDistance(0);
     console.log('Clear route');
     window.location.reload();
   };
-
-  // Calculate elevation data for the chart using actual route elevations
-  const elevationData = routeElevations.map((elevation, index) => {
-    // Calculate cumulative distance along the route (approximate based on total distance)
-    const totalDistance = routeElevations.length > 1 ? distance * (index / (routeElevations.length - 1)) : 0;
-    return {
-      distance: totalDistance,
-      elevation: elevation,
-    };
-  });
 
   const elevationGain = routeElevations.reduce((gain, elevation, index) => {
     if (index === 0) return 0;
@@ -71,6 +67,10 @@ export default function RoutePlanner() {
   const [showElevation, setShowElevation] = useState(true);
   const mapRef = useRef<any>(null);
 
+  const handleElevationHover = (distance: number | null) => {
+    setHoverPosition(distance);
+  };
+
   const handleLocationSelect = (lat: number, lon: number) => {
     // This will be handled by MapContainer's geolocation effect
     if (mapRef.current) {
@@ -84,6 +84,7 @@ export default function RoutePlanner() {
         onRouteChange={handleRouteChange}
         mapType={mapType}
         routePoints={routePoints}
+        hoverPosition={hoverPosition}
         ref={mapRef}
       />
 
@@ -133,6 +134,7 @@ export default function RoutePlanner() {
             data={elevationData}
             unit={unit}
             onToggleCollapse={() => setShowElevation(!showElevation)}
+            onHoverPosition={handleElevationHover}
           />
         </div>
       )}
