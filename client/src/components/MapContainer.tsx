@@ -169,25 +169,6 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       );
     }
 
-    // ✅ Custom icons preserved
-    const greenIcon = L.icon({
-      iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iIzIyYzU1ZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
-    });
-
-    const blueIcon = L.icon({
-      iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1zbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iIzM4OTVmZiIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
-    });
-
-    const redIcon = L.icon({
-      iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1zbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iI2VmNDQ0NCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
-    });
-
     map.on('click', async (e: L.LeafletMouseEvent) => {
       console.log('Map clicked at:', e.latlng);
       
@@ -376,13 +357,41 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       // Update internal state
       routePointsRef.current = [...routePoints];
 
-      // Rebuild polyline
+      // Immediately update polyline with straight lines for instant visual feedback
       if (polylineRef.current) {
         map.removeLayer(polylineRef.current);
-        polylineRef.current = null;
       }
 
       if (routePoints.length >= 2) {
+        // Create immediate straight-line polyline
+        const straightCoords = routePoints.map(point => [point.lat, point.lng] as [number, number]);
+        polylineRef.current = L.polyline(straightCoords, {
+          color: '#3b82f6',
+          weight: 4,
+          opacity: 0.8,
+        }).addTo(map);
+
+        // Update marker icons immediately
+        markersRef.current.forEach((marker, idx) => {
+          if (idx === 0) {
+            marker.setIcon(greenIcon);
+          } else if (idx === routePoints.length - 1) {
+            marker.setIcon(redIcon);
+          } else {
+            marker.setIcon(blueIcon);
+          }
+        });
+
+        // Calculate immediate distance with straight lines
+        let immediateDistance = 0;
+        for (let i = 0; i < straightCoords.length - 1; i++) {
+          const start = L.latLng(straightCoords[i][0], straightCoords[i][1]);
+          const end = L.latLng(straightCoords[i + 1][0], straightCoords[i + 1][1]);
+          immediateDistance += start.distanceTo(end);
+        }
+        onRouteChange?.(routePointsRef.current, immediateDistance);
+
+        // Asynchronously rebuild with proper routing
         (async () => {
           let allCoords: [number, number][] = [];
           
@@ -401,60 +410,38 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
             }
           }
 
+          // Replace with properly routed polyline
+          if (polylineRef.current) {
+            map.removeLayer(polylineRef.current);
+          }
           polylineRef.current = L.polyline(allCoords, {
             color: '#3b82f6',
             weight: 4,
             opacity: 0.8,
           }).addTo(map);
 
-          // Update marker icons
-          markersRef.current.forEach((marker, idx) => {
-            if (idx === 0) {
-              marker.setIcon(greenIcon);
-            } else if (idx === routePoints.length - 1) {
-              marker.setIcon(redIcon);
-            } else {
-              marker.setIcon(blueIcon);
-            }
-          });
-
-          // Recalculate distance
-          if (polylineRef.current) {
-            const coords = polylineRef.current.getLatLngs() as L.LatLng[];
-            let totalDistance = 0;
-            
-            for (let i = 0; i < coords.length - 1; i++) {
-              totalDistance += coords[i].distanceTo(coords[i + 1]);
-            }
-
-            onRouteChange?.(routePointsRef.current, totalDistance);
+          // Recalculate accurate distance
+          const coords = polylineRef.current.getLatLngs() as L.LatLng[];
+          let totalDistance = 0;
+          for (let i = 0; i < coords.length - 1; i++) {
+            totalDistance += coords[i].distanceTo(coords[i + 1]);
           }
+          onRouteChange?.(routePointsRef.current, totalDistance);
         })();
-      } else if (routePoints.length === 0) {
-        onRouteChange?.([], 0);
       } else {
-        onRouteChange?.(routePointsRef.current, 0);
+        // Remove polyline if less than 2 points
+        if (polylineRef.current) {
+          map.removeLayer(polylineRef.current);
+          polylineRef.current = null;
+        }
+        
+        if (routePoints.length === 0) {
+          onRouteChange?.([], 0);
+        } else {
+          onRouteChange?.(routePointsRef.current, 0);
+        }
       }
     }
-
-    // Define icons for the effect
-    const greenIcon = L.icon({
-      iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iIzIyYzU1ZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
-    });
-
-    const blueIcon = L.icon({
-      iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iIzM4OTVmZiIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
-    });
-
-    const redIcon = L.icon({
-      iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iI2VmNDQ0NCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
-    });
   }, [routePoints, isMapReady, onRouteChange]);
 
   // Expose map instance to parent
