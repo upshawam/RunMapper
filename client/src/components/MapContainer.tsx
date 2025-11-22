@@ -25,9 +25,17 @@ interface MapContainerProps {
   hoverPosition?: number | null;
   routingService?: RoutingService;
   elevationService?: ElevationService;
+  onDebugUpdate?: (debugInfo: {
+    routingService: string;
+    elevationService: string;
+    lastElevationCall?: string;
+    lastRoutingCall?: string;
+    elevationStatus?: 'pending' | 'success' | 'error';
+    routingStatus?: 'pending' | 'success' | 'error';
+  }) => void;
 }
 
-const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChange, mapType = 'map', className = '', routePoints = [], hoverPosition, routingService = 'openrouteservice', elevationService = 'open-elevation' }, ref) => {
+const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChange, mapType = 'map', className = '', routePoints = [], hoverPosition, routingService = 'openrouteservice', elevationService = 'open-elevation', onDebugUpdate }, ref) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const routePointsRef = useRef<RoutePoint[]>([]);
@@ -65,6 +73,12 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
   const getRouteBetweenPoints = async (start: [number, number], end: [number, number]): Promise<{coords: [number, number][], elevations: number[]}> => {
     // If straight-line routing is selected
     if (routingService === 'straight') {
+      onDebugUpdate?.({
+        routingService,
+        elevationService,
+        lastRoutingCall: 'Straight line routing (no API call)',
+        routingStatus: 'success'
+      });
       return {
         coords: [start, end],
         elevations: [100, 100]
@@ -74,24 +88,29 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
     // Try the selected routing service
     try {
       if (routingService === 'openrouteservice') {
-        const orsResponse = await fetch(
-          "https://api.openrouteservice.org/v2/directions/foot-walking/geojson",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImJjOWZhZmQ5MmY0ZDRhMjQ5ZjliYzIwMDNkNzY3MDllIiwiaCI6Im11cm11cjY0In0="
-            },
-            body: JSON.stringify({
-              coordinates: [
-                [start[1], start[0]], // ORS expects [lng, lat]
-                [end[1], end[0]]
-              ],
-              elevation: true,
-              format: "geojson"
-            })
-          }
-        );
+        const url = "https://api.openrouteservice.org/v2/directions/foot-walking/geojson";
+        onDebugUpdate?.({
+          routingService,
+          elevationService,
+          lastRoutingCall: url,
+          routingStatus: 'pending'
+        });
+        
+        const orsResponse = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImJjOWZhZmQ5MmY0ZDRhMjQ5ZjliYzIwMDNkNzY3MDllIiwiaCI6Im11cm11cjY0In0="
+          },
+          body: JSON.stringify({
+            coordinates: [
+              [start[1], start[0]], // ORS expects [lng, lat]
+              [end[1], end[0]]
+            ],
+            elevation: true,
+            format: "geojson"
+          })
+        });
 
         if (orsResponse.ok) {
           const data = await orsResponse.json();
@@ -106,13 +125,32 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
               elevations.push(coord[2] || 100); // elevation
             });
 
+            onDebugUpdate?.({
+              routingService,
+              elevationService,
+              lastRoutingCall: url,
+              routingStatus: 'success'
+            });
             return { coords: parsedCoords, elevations };
           }
+        } else {
+          onDebugUpdate?.({
+            routingService,
+            elevationService,
+            lastRoutingCall: url,
+            routingStatus: 'error'
+          });
         }
       } else if (routingService === 'osrm') {
-        const osrmResponse = await fetch(
-          `https://router.project-osrm.org/route/v1/foot/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`
-        );
+        const url = `https://router.project-osrm.org/route/v1/foot/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`;
+        onDebugUpdate?.({
+          routingService,
+          elevationService,
+          lastRoutingCall: url,
+          routingStatus: 'pending'
+        });
+        
+        const osrmResponse = await fetch(url);
 
         if (osrmResponse.ok) {
           const data = await osrmResponse.json();
@@ -122,17 +160,36 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
             const coords: [number, number][] = route.geometry.coordinates.map((coord: number[]) => [coord[1], coord[0]]);
             const elevations: number[] = new Array(coords.length).fill(100);
             
+            onDebugUpdate?.({
+              routingService,
+              elevationService,
+              lastRoutingCall: url,
+              routingStatus: 'success'
+            });
             return { coords, elevations };
           }
+        } else {
+          onDebugUpdate?.({
+            routingService,
+            elevationService,
+            lastRoutingCall: url,
+            routingStatus: 'error'
+          });
         }
       } else if (routingService === 'mapbox') {
         // Mapbox has a generous free tier (100k requests/month)
         const MAPBOX_ACCESS_TOKEN = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoidXBzaGF3YW0iLCJhIjoiY2x6Z3B5Z3NqMDN5ZzJqcGJzZ3p5Z3p5In0.YOUR_REAL_TOKEN_HERE';
         
         if (!MAPBOX_ACCESS_TOKEN.includes('YOUR_REAL_TOKEN_HERE')) {
-          const mapboxResponse = await fetch(
-            `https://api.mapbox.com/directions/v5/mapbox/walking/${start[1]},${start[0]};${end[1]},${end[0]}?geometries=geojson&overview=full&steps=false&access_token=${MAPBOX_ACCESS_TOKEN}`
-          );
+          const url = `https://api.mapbox.com/directions/v5/mapbox/walking/${start[1]},${start[0]};${end[1]},${end[0]}?geometries=geojson&overview=full&steps=false&access_token=${MAPBOX_ACCESS_TOKEN}`;
+          onDebugUpdate?.({
+            routingService,
+            elevationService,
+            lastRoutingCall: url,
+            routingStatus: 'pending'
+          });
+          
+          const mapboxResponse = await fetch(url);
 
           if (mapboxResponse.ok) {
             const data = await mapboxResponse.json();
@@ -142,14 +199,40 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
               const coords: [number, number][] = route.geometry.coordinates.map((coord: number[]) => [coord[1], coord[0]]);
               const elevations: number[] = new Array(coords.length).fill(100);
               
+              onDebugUpdate?.({
+                routingService,
+                elevationService,
+                lastRoutingCall: url,
+                routingStatus: 'success'
+              });
               return { coords, elevations };
             }
+          } else {
+            onDebugUpdate?.({
+              routingService,
+              elevationService,
+              lastRoutingCall: url,
+              routingStatus: 'error'
+            });
           }
+        } else {
+          onDebugUpdate?.({
+            routingService,
+            elevationService,
+            lastRoutingCall: 'Mapbox token not configured',
+            routingStatus: 'error'
+          });
         }
       } else if (routingService === 'thunderforest') {
-        const thunderforestResponse = await fetch(
-          `https://api.thunderforest.com/v1/routes?origin=${start[0]},${start[1]}&destination=${end[0]},${end[1]}&profile=walking&format=geojson&apikey=`
-        );
+        const url = `https://api.thunderforest.com/v1/routes?origin=${start[0]},${start[1]}&destination=${end[0]},${end[1]}&profile=walking&format=geojson&apikey=`;
+        onDebugUpdate?.({
+          routingService,
+          elevationService,
+          lastRoutingCall: url,
+          routingStatus: 'pending'
+        });
+        
+        const thunderforestResponse = await fetch(url);
 
         if (thunderforestResponse.ok) {
           const data = await thunderforestResponse.json();
@@ -158,16 +241,41 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
             const parsedCoords: [number, number][] = coords.map((coord: number[]) => [coord[1], coord[0]]);
             const elevations: number[] = new Array(parsedCoords.length).fill(100);
             
+            onDebugUpdate?.({
+              routingService,
+              elevationService,
+              lastRoutingCall: url,
+              routingStatus: 'success'
+            });
             return { coords: parsedCoords, elevations };
           }
+        } else {
+          onDebugUpdate?.({
+            routingService,
+            elevationService,
+            lastRoutingCall: url,
+            routingStatus: 'error'
+          });
         }
       }
     } catch (error) {
       console.warn(`${routingService} routing failed:`, error);
+      onDebugUpdate?.({
+        routingService,
+        elevationService,
+        lastRoutingCall: `${routingService} service failed`,
+        routingStatus: 'error'
+      });
     }
 
     // Fallback to straight-line routing if selected service fails
     console.warn(`Selected routing service (${routingService}) failed, falling back to straight lines`);
+    onDebugUpdate?.({
+      routingService,
+      elevationService,
+      lastRoutingCall: `Fallback to straight lines`,
+      routingStatus: 'success'
+    });
     return {
       coords: [start, end],
       elevations: [100, 100]
@@ -177,48 +285,122 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
   const getElevation = async (lat: number, lng: number): Promise<number> => {
     // If no elevation service selected, return default
     if (elevationService === 'none') {
+      onDebugUpdate?.({
+        routingService,
+        elevationService,
+        lastElevationCall: 'No elevation service selected',
+        elevationStatus: 'success'
+      });
       return 100;
     }
 
     try {
       if (elevationService === 'open-elevation') {
-        const response = await fetch(
-          `https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lng}`
-        );
+        const url = `https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lng}`;
+        onDebugUpdate?.({
+          routingService,
+          elevationService,
+          lastElevationCall: url,
+          elevationStatus: 'pending'
+        });
+        
+        const response = await fetch(url);
         
         if (response.ok) {
           const data = await response.json();
           const elevation = data.results?.[0]?.elevation;
+          onDebugUpdate?.({
+            routingService,
+            elevationService,
+            lastElevationCall: url,
+            elevationStatus: 'success'
+          });
           return elevation || 100;
+        } else {
+          onDebugUpdate?.({
+            routingService,
+            elevationService,
+            lastElevationCall: url,
+            elevationStatus: 'error'
+          });
         }
       } else if (elevationService === 'mapbox') {
         const MAPBOX_ACCESS_TOKEN = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoidXBzaGF3YW0iLCJhIjoiY2x6Z3B5Z3NqMDN5ZzJqcGJzZ3p5Z3p5In0.YOUR_REAL_TOKEN_HERE';
         
         if (!MAPBOX_ACCESS_TOKEN.includes('YOUR_REAL_TOKEN_HERE')) {
-          const response = await fetch(
-            `https://api.mapbox.com/v4/mapbox.terrain-rgb/${Math.floor((lng + 180) / 360 * Math.pow(2, 10))},${Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, 10))}.pngraw?access_token=${MAPBOX_ACCESS_TOKEN}`
-          );
+          const url = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${Math.floor((lng + 180) / 360 * Math.pow(2, 10))},${Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, 10))}.pngraw?access_token=${MAPBOX_ACCESS_TOKEN}`;
+          onDebugUpdate?.({
+            routingService,
+            elevationService,
+            lastElevationCall: 'Mapbox Terrain-RGB API',
+            elevationStatus: 'pending'
+          });
+          
+          const response = await fetch(url);
           
           if (response.ok) {
-            // Mapbox Terrain-RGB returns RGB values that encode elevation
-            // This is complex to decode, so for now just return a placeholder
+            onDebugUpdate?.({
+              routingService,
+              elevationService,
+              lastElevationCall: 'Mapbox Terrain-RGB API',
+              elevationStatus: 'success'
+            });
             return 100; // TODO: Implement proper Mapbox elevation decoding
+          } else {
+            onDebugUpdate?.({
+              routingService,
+              elevationService,
+              lastElevationCall: 'Mapbox Terrain-RGB API',
+              elevationStatus: 'error'
+            });
           }
+        } else {
+          onDebugUpdate?.({
+            routingService,
+            elevationService,
+            lastElevationCall: 'Mapbox token not configured',
+            elevationStatus: 'error'
+          });
         }
       } else if (elevationService === 'usgs') {
         // USGS Elevation Point Query Service (US only)
-        const response = await fetch(
-          `https://nationalmap.gov/epqs/pqs.php?x=${lng}&y=${lat}&units=Meters&output=json`
-        );
+        const url = `https://nationalmap.gov/epqs/pqs.php?x=${lng}&y=${lat}&units=Meters&output=json`;
+        onDebugUpdate?.({
+          routingService,
+          elevationService,
+          lastElevationCall: url,
+          elevationStatus: 'pending'
+        });
+        
+        const response = await fetch(url);
         
         if (response.ok) {
           const data = await response.json();
           const elevation = data.USGS_Elevation_Point_Query_Service?.Elevation_Query?.Elevation;
+          onDebugUpdate?.({
+            routingService,
+            elevationService,
+            lastElevationCall: url,
+            elevationStatus: 'success'
+          });
           return elevation || 100;
+        } else {
+          onDebugUpdate?.({
+            routingService,
+            elevationService,
+            lastElevationCall: url,
+            elevationStatus: 'error'
+          });
         }
       }
     } catch (error) {
       console.warn(`${elevationService} elevation service failed:`, error);
+      onDebugUpdate?.({
+        routingService,
+        elevationService,
+        lastElevationCall: `${elevationService} service failed`,
+        elevationStatus: 'error'
+      });
     }
 
     // Fallback to default elevation if service fails

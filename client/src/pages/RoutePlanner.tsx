@@ -30,6 +30,17 @@ export default function RoutePlanner() {
   const [fullRouteCoords, setFullRouteCoords] = useState<RoutePoint[]>([]);
   const [routingService, setRoutingService] = useState<RoutingService>('openrouteservice');
   const [elevationService, setElevationService] = useState<ElevationService>('open-elevation');
+  const [debugInfo, setDebugInfo] = useState<{
+    routingService: string;
+    elevationService: string;
+    lastElevationCall?: string;
+    lastRoutingCall?: string;
+    elevationStatus?: 'pending' | 'success' | 'error';
+    routingStatus?: 'pending' | 'success' | 'error';
+  }>({
+    routingService: 'openrouteservice',
+    elevationService: 'open-elevation'
+  });
 
   const handleRouteChange = (points: RoutePoint[], newDistance: number, elevations?: number[], elevationChartData?: {distance: number, elevation: number}[], fullCoords?: RoutePoint[]) => {
     setRoutePoints(points);
@@ -96,6 +107,7 @@ export default function RoutePlanner() {
         hoverPosition={hoverPosition}
         routingService={routingService}
         elevationService={elevationService}
+        onDebugUpdate={setDebugInfo}
         ref={mapRef}
       />
 
@@ -143,7 +155,12 @@ export default function RoutePlanner() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="open-elevation">Open-Elevation</SelectItem>
-              <SelectItem value="mapbox">Mapbox Elevation</SelectItem>
+              <SelectItem value="mapbox">
+                <div className="flex flex-col">
+                  <span>Mapbox Elevation</span>
+                  <span className="text-xs text-gray-500">⚠️ Requires token</span>
+                </div>
+              </SelectItem>
               <SelectItem value="usgs">USGS Elevation</SelectItem>
               <SelectItem value="none">No Elevation</SelectItem>
             </SelectContent>
@@ -183,6 +200,46 @@ export default function RoutePlanner() {
           </button>
         </div>
       )}
+
+      {/* Debug Panel */}
+      <div className="absolute bottom-4 right-4 z-[1000] bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg p-3 shadow-lg max-w-xs">
+        <div className="text-xs font-semibold text-gray-700 mb-2">API Debug Info</div>
+        <div className="space-y-1 text-xs">
+          <div><span className="font-medium">Routing:</span> {debugInfo.routingService}</div>
+          <div><span className="font-medium">Elevation:</span> {debugInfo.elevationService}</div>
+          {(debugInfo.routingService === 'mapbox' || debugInfo.elevationService === 'mapbox') && (
+            <div className="text-xs text-orange-600 bg-orange-50 p-1 rounded">
+              ⚠️ Mapbox requires token & has usage limits
+            </div>
+          )}
+          {debugInfo.lastElevationCall && (
+            <div className="mt-2">
+              <div className="font-medium">Last Elevation Call:</div>
+              <div className={`text-xs break-all ${debugInfo.elevationStatus === 'success' ? 'text-green-600' : debugInfo.elevationStatus === 'error' ? 'text-red-600' : 'text-blue-600'}`}>
+                {debugInfo.lastElevationCall}
+              </div>
+              {debugInfo.elevationStatus && (
+                <div className={`text-xs font-medium ${debugInfo.elevationStatus === 'success' ? 'text-green-600' : debugInfo.elevationStatus === 'error' ? 'text-red-600' : 'text-blue-600'}`}>
+                  Status: {debugInfo.elevationStatus}
+                </div>
+              )}
+            </div>
+          )}
+          {debugInfo.lastRoutingCall && (
+            <div className="mt-2">
+              <div className="font-medium">Last Routing Call:</div>
+              <div className={`text-xs break-all ${debugInfo.routingStatus === 'success' ? 'text-green-600' : debugInfo.routingStatus === 'error' ? 'text-red-600' : 'text-blue-600'}`}>
+                {debugInfo.lastRoutingCall}
+              </div>
+              {debugInfo.routingStatus && (
+                <div className={`text-xs font-medium ${debugInfo.routingStatus === 'success' ? 'text-green-600' : debugInfo.routingStatus === 'error' ? 'text-red-600' : 'text-blue-600'}`}>
+                  Status: {debugInfo.routingStatus}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
