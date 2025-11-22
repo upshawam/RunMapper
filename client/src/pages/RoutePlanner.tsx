@@ -20,10 +20,14 @@ export default function RoutePlanner() {
   const [distance, setDistance] = useState(0);
   const [unit, setUnit] = useState<'mi' | 'km'>('mi');
   const [mapType, setMapType] = useState<'map' | 'satellite'>('map');
+  const [routeElevations, setRouteElevations] = useState<number[]>([]);
 
-  const handleRouteChange = (points: RoutePoint[], newDistance: number) => {
+  const handleRouteChange = (points: RoutePoint[], newDistance: number, elevations?: number[]) => {
     setRoutePoints(points);
     setDistance(newDistance);
+    if (elevations) {
+      setRouteElevations(elevations);
+    }
   };
 
   const handleUndo = () => {
@@ -36,33 +40,31 @@ export default function RoutePlanner() {
 
   const handleClear = () => {
     setRoutePoints([]);
+    setRouteElevations([]);
     setDistance(0);
     console.log('Clear route');
     window.location.reload();
   };
 
-  const elevationData = routePoints.map((point, index) => {
-    let totalDistance = 0;
-    for (let i = 0; i < index; i++) {
-      const dx = routePoints[i + 1].lng - routePoints[i].lng;
-      const dy = routePoints[i + 1].lat - routePoints[i].lat;
-      totalDistance += Math.sqrt(dx * dx + dy * dy) * 111320;
-    }
+  // Calculate elevation data for the chart using actual route elevations
+  const elevationData = routeElevations.map((elevation, index) => {
+    // Calculate cumulative distance along the route (approximate based on total distance)
+    const totalDistance = routeElevations.length > 1 ? distance * (index / (routeElevations.length - 1)) : 0;
     return {
       distance: totalDistance,
-      elevation: point.elevation || 0,
+      elevation: elevation,
     };
   });
 
-  const elevationGain = routePoints.reduce((gain, point, index) => {
+  const elevationGain = routeElevations.reduce((gain, elevation, index) => {
     if (index === 0) return 0;
-    const diff = (point.elevation || 0) - (routePoints[index - 1].elevation || 0);
+    const diff = elevation - routeElevations[index - 1];
     return gain + (diff > 0 ? diff : 0);
   }, 0);
 
-  const elevationLoss = routePoints.reduce((loss, point, index) => {
+  const elevationLoss = routeElevations.reduce((loss, elevation, index) => {
     if (index === 0) return 0;
-    const diff = (point.elevation || 0) - (routePoints[index - 1].elevation || 0);
+    const diff = elevation - routeElevations[index - 1];
     return loss + (diff < 0 ? Math.abs(diff) : 0);
   }, 0);
 

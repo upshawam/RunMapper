@@ -9,7 +9,7 @@ interface RoutePoint {
 }
 
 interface MapContainerProps {
-  onRouteChange?: (points: RoutePoint[], distance: number) => void;
+  onRouteChange?: (points: RoutePoint[], distance: number, elevations?: number[]) => void;
   mapType?: 'map' | 'satellite';
   className?: string;
   routePoints?: RoutePoint[];
@@ -23,6 +23,8 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
   const polylineRef = useRef<L.Polyline | null>(null);
   const satelliteLayerRef = useRef<L.TileLayer | null>(null);
   const roadsOverlayRef = useRef<L.TileLayer | null>(null);
+  const segmentLengthsRef = useRef<number[]>([]); // Store how many coords each segment adds
+  const routeElevationsRef = useRef<number[]>([]); // Store all elevations along the route
   const [isMapReady, setIsMapReady] = useState(false);
 
   // Define icons
@@ -45,7 +47,7 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
   });
 
   // ✅ Updated to call ORS directly with your API key
-  const getRouteBetweenPoints = async (start: [number, number], end: [number, number]): Promise<[number, number][]> => {
+  const getRouteBetweenPoints = async (start: [number, number], end: [number, number]): Promise<{coords: [number, number][], elevations: number[]}> => {
     try {
       const response = await fetch(
         "https://api.openrouteservice.org/v2/directions/foot-walking/geojson",
@@ -69,20 +71,39 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       if (!response.ok) {
         const errorText = await response.text();
         console.warn('Routing API failed:', errorText);
-        return [start, end];
+        // Return straight line with default elevations
+        return {
+          coords: [start, end],
+          elevations: [100, 100] // Default elevations
+        };
       }
 
       const data = await response.json();
       const coords = data.features?.[0]?.geometry?.coordinates;
       if (!coords) {
         console.warn('Invalid routing response format');
-        return [start, end];
+        return {
+          coords: [start, end],
+          elevations: [100, 100]
+        };
       }
 
-      return coords.map((coord: number[]) => [coord[1], coord[0]] as [number, number]);
+      // ORS returns [lng, lat, elevation]
+      const parsedCoords: [number, number][] = [];
+      const elevations: number[] = [];
+      
+      coords.forEach((coord: number[]) => {
+        parsedCoords.push([coord[1], coord[0]]); // [lat, lng]
+        elevations.push(coord[2] || 100); // elevation
+      });
+
+      return { coords: parsedCoords, elevations };
     } catch (error) {
       console.error('Routing error:', error instanceof Error ? error.message : String(error));
-      return [start, end];
+      return {
+        coords: [start, end],
+        elevations: [100, 100]
+      };
     }
   };
 
@@ -188,23 +209,31 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       if (!isFirst) {
         const lastPoint = routePointsRef.current[routePointsRef.current.length - 1];
         console.log('Last point:', lastPoint);
-        const routeCoords = await getRouteBetweenPoints(
+        const routeData = await getRouteBetweenPoints(
           [lastPoint.lat, lastPoint.lng],
           [point.lat, point.lng]
         );
 
-        console.log('Route coordinates:', routeCoords);
+        console.log('Route coordinates:', routeData.coords);
 
         if (polylineRef.current) {
           const existingCoords = polylineRef.current.getLatLngs() as L.LatLng[];
-          const newCoords = [...existingCoords, ...routeCoords.slice(1).map(coord => L.latLng(coord[0], coord[1]))];
+          const newCoords = [...existingCoords, ...routeData.coords.slice(1).map(coord => L.latLng(coord[0], coord[1]))];
           polylineRef.current.setLatLngs(newCoords);
+          // Store how many coordinates this segment added (excluding the first point which overlaps)
+          segmentLengthsRef.current.push(routeData.coords.length - 1);
+          // Add elevations for this segment (excluding the first point which overlaps)
+          routeElevationsRef.current.push(...routeData.elevations.slice(1));
         } else {
-          polylineRef.current = L.polyline(routeCoords, {
+          polylineRef.current = L.polyline(routeData.coords, {
             color: '#3b82f6',
             weight: 4,
             opacity: 0.8,
           }).addTo(map);
+          // First segment includes all coordinates
+          segmentLengthsRef.current.push(routeData.coords.length);
+          // Store all elevations for the first segment
+          routeElevationsRef.current = [...routeData.elevations];
         }
       }
 
@@ -248,24 +277,36 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
         polylineRef.current = null;
       }
 
-      if (routePointsRef.current.length < 2) return;
+      if (routePointsRef.current.length < 2) {
+        segmentLengthsRef.current = [];
+        routeElevationsRef.current = [];
+        return;
+      }
 
       let allCoords: [number, number][] = [];
+      let allElevations: number[] = [];
+      segmentLengthsRef.current = [];
       
       for (let i = 0; i < routePointsRef.current.length - 1; i++) {
         const start = routePointsRef.current[i];
         const end = routePointsRef.current[i + 1];
-        const routeCoords = await getRouteBetweenPoints(
+        const routeData = await getRouteBetweenPoints(
           [start.lat, start.lng],
           [end.lat, end.lng]
         );
         
         if (i === 0) {
-          allCoords = [...routeCoords];
+          allCoords = [...routeData.coords];
+          allElevations = [...routeData.elevations];
+          segmentLengthsRef.current.push(routeData.coords.length);
         } else {
-          allCoords = [...allCoords, ...routeCoords.slice(1)];
+          allCoords = [...allCoords, ...routeData.coords.slice(1)];
+          allElevations = [...allElevations, ...routeData.elevations.slice(1)];
+          segmentLengthsRef.current.push(routeData.coords.length - 1);
         }
       }
+
+      routeElevationsRef.current = allElevations;
 
       polylineRef.current = L.polyline(allCoords, {
         color: '#3b82f6',
@@ -278,12 +319,12 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
 
     const calculateDistance = () => {
       if (routePointsRef.current.length < 2) {
-        onRouteChange?.(routePointsRef.current, 0);
+        onRouteChange?.(routePointsRef.current, 0, []);
         return;
       }
 
       if (!polylineRef.current) {
-        onRouteChange?.(routePointsRef.current, 0);
+        onRouteChange?.(routePointsRef.current, 0, []);
         return;
       }
 
@@ -294,7 +335,7 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
         totalDistance += coords[i].distanceTo(coords[i + 1]);
       }
 
-      onRouteChange?.(routePointsRef.current, totalDistance);
+      onRouteChange?.(routePointsRef.current, totalDistance, routeElevationsRef.current);
     };
 
     return () => {
@@ -344,103 +385,65 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
 
     const map = mapInstanceRef.current;
 
-    // If external routePoints is shorter than internal, remove markers and rebuild
+    // If external routePoints is shorter than internal, remove markers and trim route
     if (routePoints.length < routePointsRef.current.length) {
+      const pointsToRemove = routePointsRef.current.length - routePoints.length;
+
       // Remove excess markers
-      while (markersRef.current.length > routePoints.length) {
+      for (let i = 0; i < pointsToRemove; i++) {
         const marker = markersRef.current.pop();
         if (marker) {
           map.removeLayer(marker);
         }
       }
 
+      // Remove excess segments from polyline
+      if (polylineRef.current && segmentLengthsRef.current.length > 0) {
+        for (let i = 0; i < pointsToRemove; i++) {
+          if (segmentLengthsRef.current.length > 0) {
+            const lastSegmentLength = segmentLengthsRef.current.pop()!;
+            const currentCoords = polylineRef.current.getLatLngs() as L.LatLng[];
+            const newCoords = currentCoords.slice(0, currentCoords.length - lastSegmentLength);
+            polylineRef.current.setLatLngs(newCoords);
+            // Also remove the corresponding elevations
+            routeElevationsRef.current = routeElevationsRef.current.slice(0, routeElevationsRef.current.length - lastSegmentLength);
+          }
+        }
+      }
+
       // Update internal state
       routePointsRef.current = [...routePoints];
 
-      // Immediately update polyline with straight lines for instant visual feedback
+      // Update marker icons
+      updateMarkerIcons();
+
+      // Recalculate distance
+      if (routePoints.length >= 2 && polylineRef.current) {
+        const coords = polylineRef.current.getLatLngs() as L.LatLng[];
+        let totalDistance = 0;
+        for (let i = 0; i < coords.length - 1; i++) {
+          totalDistance += coords[i].distanceTo(coords[i + 1]);
+        }
+        onRouteChange?.(routePointsRef.current, totalDistance);
+      } else {
+        onRouteChange?.(routePointsRef.current, 0);
+      }
+    } else if (routePoints.length === 0 && routePointsRef.current.length > 0) {
+      // Clear all
+      markersRef.current.forEach(marker => {
+        map.removeLayer(marker);
+      });
+      markersRef.current = [];
+      
       if (polylineRef.current) {
         map.removeLayer(polylineRef.current);
+        polylineRef.current = null;
       }
-
-      if (routePoints.length >= 2) {
-        // Create immediate straight-line polyline
-        const straightCoords = routePoints.map(point => [point.lat, point.lng] as [number, number]);
-        polylineRef.current = L.polyline(straightCoords, {
-          color: '#3b82f6',
-          weight: 4,
-          opacity: 0.8,
-        }).addTo(map);
-
-        // Update marker icons immediately
-        markersRef.current.forEach((marker, idx) => {
-          if (idx === 0) {
-            marker.setIcon(greenIcon);
-          } else if (idx === routePoints.length - 1) {
-            marker.setIcon(redIcon);
-          } else {
-            marker.setIcon(blueIcon);
-          }
-        });
-
-        // Calculate immediate distance with straight lines
-        let immediateDistance = 0;
-        for (let i = 0; i < straightCoords.length - 1; i++) {
-          const start = L.latLng(straightCoords[i][0], straightCoords[i][1]);
-          const end = L.latLng(straightCoords[i + 1][0], straightCoords[i + 1][1]);
-          immediateDistance += start.distanceTo(end);
-        }
-        onRouteChange?.(routePointsRef.current, immediateDistance);
-
-        // Asynchronously rebuild with proper routing
-        (async () => {
-          let allCoords: [number, number][] = [];
-          
-          for (let i = 0; i < routePoints.length - 1; i++) {
-            const start = routePoints[i];
-            const end = routePoints[i + 1];
-            const routeCoords = await getRouteBetweenPoints(
-              [start.lat, start.lng],
-              [end.lat, end.lng]
-            );
-            
-            if (i === 0) {
-              allCoords = [...routeCoords];
-            } else {
-              allCoords = [...allCoords, ...routeCoords.slice(1)];
-            }
-          }
-
-          // Replace with properly routed polyline
-          if (polylineRef.current) {
-            map.removeLayer(polylineRef.current);
-          }
-          polylineRef.current = L.polyline(allCoords, {
-            color: '#3b82f6',
-            weight: 4,
-            opacity: 0.8,
-          }).addTo(map);
-
-          // Recalculate accurate distance
-          const coords = polylineRef.current.getLatLngs() as L.LatLng[];
-          let totalDistance = 0;
-          for (let i = 0; i < coords.length - 1; i++) {
-            totalDistance += coords[i].distanceTo(coords[i + 1]);
-          }
-          onRouteChange?.(routePointsRef.current, totalDistance);
-        })();
-      } else {
-        // Remove polyline if less than 2 points
-        if (polylineRef.current) {
-          map.removeLayer(polylineRef.current);
-          polylineRef.current = null;
-        }
-        
-        if (routePoints.length === 0) {
-          onRouteChange?.([], 0);
-        } else {
-          onRouteChange?.(routePointsRef.current, 0);
-        }
-      }
+      
+      routePointsRef.current = [];
+      segmentLengthsRef.current = [];
+      routeElevationsRef.current = [];
+      onRouteChange?.([], 0, []);
     }
   }, [routePoints, isMapReady, onRouteChange]);
 
