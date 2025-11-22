@@ -36,6 +36,7 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
   const [isMapReady, setIsMapReady] = useState(false);
   const [isProcessingClick, setIsProcessingClick] = useState(false);
   const [hasShownNetworkWarning, setHasShownNetworkWarning] = useState(false);
+  const [routingMode, setRoutingMode] = useState<'smart' | 'straight'>('smart');
 
   // Define icons
   const greenIcon = L.icon({
@@ -58,6 +59,14 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
 
   // ✅ Updated to call ORS directly with your API key
   const getRouteBetweenPoints = async (start: [number, number], end: [number, number]): Promise<{coords: [number, number][], elevations: number[]}> => {
+    // If user has chosen straight-line routing, skip API call
+    if (routingMode === 'straight') {
+      return {
+        coords: [start, end],
+        elevations: [100, 100]
+      };
+    }
+
     try {
       const response = await fetch(
         "https://api.openrouteservice.org/v2/directions/foot-walking/geojson",
@@ -81,10 +90,14 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       if (!response.ok) {
         const errorText = await response.text();
         console.warn('Routing API failed:', errorText);
-        // Return straight line with default elevations
+        // Automatically switch to straight-line mode on failure
+        setRoutingMode('straight');
+        if (!hasShownNetworkWarning) {
+          setHasShownNetworkWarning(true);
+        }
         return {
           coords: [start, end],
-          elevations: [100, 100] // Default elevations
+          elevations: [100, 100]
         };
       }
 
@@ -109,9 +122,10 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
 
       return { coords: parsedCoords, elevations };
     } catch (error) {
+      // Automatically switch to straight-line mode on network errors
+      setRoutingMode('straight');
       if (!hasShownNetworkWarning) {
         setHasShownNetworkWarning(true);
-        console.info('Network restrictions detected - using basic routing without elevation data');
       }
       return {
         coords: [start, end],
@@ -129,8 +143,6 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       if (!response.ok) {
         if (!hasShownNetworkWarning) {
           setHasShownNetworkWarning(true);
-          // Could add a toast notification here if we had a toast system
-          console.info('Network restrictions detected - using basic routing without elevation data');
         }
         return 100;
       }
@@ -141,7 +153,6 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
     } catch (error) {
       if (!hasShownNetworkWarning) {
         setHasShownNetworkWarning(true);
-        console.info('Network restrictions detected - using basic routing without elevation data');
       }
       return 100;
     }
@@ -584,7 +595,23 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-yellow-100 border border-yellow-300 text-yellow-800 px-4 py-2 rounded-lg shadow-lg text-sm">
           <div className="flex items-center gap-2">
             <span>⚠️</span>
-            <span>Network restrictions detected - using basic routing</span>
+            <div className="flex flex-col gap-1">
+              <span>Network restrictions detected - using straight-line routing</span>
+              <div className="flex gap-2 text-xs">
+                <button 
+                  onClick={() => setRoutingMode('smart')}
+                  className={`px-2 py-1 rounded ${routingMode === 'smart' ? 'bg-yellow-200' : 'bg-yellow-100 hover:bg-yellow-200'}`}
+                >
+                  Try Smart Routing
+                </button>
+                <button 
+                  onClick={() => setRoutingMode('straight')}
+                  className={`px-2 py-1 rounded ${routingMode === 'straight' ? 'bg-yellow-200' : 'bg-yellow-100 hover:bg-yellow-200'}`}
+                >
+                  Straight Lines
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
