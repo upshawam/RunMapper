@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import MapContainer from '@/components/MapContainer';
 import RouteStats from '@/components/RouteStats';
 import MapControls from '@/components/MapControls';
@@ -41,6 +41,15 @@ export default function RoutePlanner() {
     routingService: 'openrouteservice',
     elevationService: 'open-elevation'
   });
+
+  // Update debug info when services change
+  useEffect(() => {
+    setDebugInfo(prev => ({
+      ...prev,
+      routingService,
+      elevationService
+    }));
+  }, [routingService, elevationService]);
 
   const handleRouteChange = (points: RoutePoint[], newDistance: number, elevations?: number[], elevationChartData?: {distance: number, elevation: number}[], fullCoords?: RoutePoint[]) => {
     setRoutePoints(points);

@@ -422,6 +422,18 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
     });
   };
 
+  // Update debug panel when service selections change
+  useEffect(() => {
+    onDebugUpdate?.({
+      routingService,
+      elevationService,
+      lastElevationCall: 'Service selection updated',
+      lastRoutingCall: 'Service selection updated',
+      elevationStatus: 'success',
+      routingStatus: 'success'
+    });
+  }, [routingService, elevationService, onDebugUpdate]);
+
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
 
