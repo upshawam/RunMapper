@@ -1,35 +1,36 @@
-import { Map, Satellite } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Layers } from 'lucide-react';
+
+export type MapType = 
+  | 'map' 
+  | 'satellite' 
+  | 'hybrid'
+  | 'esri-topo';
 
 interface MapTypeToggleProps {
-  mapType: 'map' | 'satellite';
-  onToggle: (type: 'map' | 'satellite') => void;
+  mapType: MapType;
+  onToggle: (type: MapType) => void;
 }
 
 export default function MapTypeToggle({ mapType, onToggle }: MapTypeToggleProps) {
+  const mapTypeLabels: Record<MapType, string> = {
+    'map': 'OpenStreetMap',
+    'satellite': 'Satellite',
+    'hybrid': 'Satellite + Roads',
+    'esri-topo': 'Esri Topographic'
+  };
+
   return (
-    <div className="flex gap-1 p-1 rounded-lg bg-white shadow-lg border-2" data-testid="container-map-type-toggle">
-      <Button
-        size="sm"
-        variant={mapType === 'map' ? 'default' : 'ghost'}
-        className="gap-2"
-        onClick={() => onToggle('map')}
-        data-testid="button-map-view"
+    <div className="flex items-center gap-2 p-1 rounded-lg bg-white shadow-lg border-2">
+      <Layers className="w-4 h-4 ml-2 text-gray-600" />
+      <select 
+        value={mapType} 
+        onChange={(e) => onToggle(e.target.value as MapType)}
+        className="w-48 border-0 shadow-none focus:ring-0 bg-transparent text-sm"
       >
-        <Map className="w-4 h-4" />
-        Map
-      </Button>
-      
-      <Button
-        size="sm"
-        variant={mapType === 'satellite' ? 'default' : 'ghost'}
-        className="gap-2"
-        onClick={() => onToggle('satellite')}
-        data-testid="button-satellite-view"
-      >
-        <Satellite className="w-4 h-4" />
-        Satellite
-      </Button>
+        {Object.entries(mapTypeLabels).map(([value, label]) => (
+          <option key={value} value={value}>{label}</option>
+        ))}
+      </select>
     </div>
   );
 }

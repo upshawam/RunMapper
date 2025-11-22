@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import MapContainer from '@/components/MapContainer';
 import RouteStats from '@/components/RouteStats';
 import MapControls from '@/components/MapControls';
-import MapTypeToggle from '@/components/MapTypeToggle';
+import MapTypeToggle, { MapType } from '@/components/MapTypeToggle';
 import ElevationChart from '@/components/ElevationChart';
 import ExportDialog from '@/components/ExportDialog';
 import RouteActions from '@/components/RouteActions';
@@ -19,7 +19,7 @@ export default function RoutePlanner() {
   const [routePoints, setRoutePoints] = useState<RoutePoint[]>([]);
   const [distance, setDistance] = useState(0);
   const [unit, setUnit] = useState<'mi' | 'km'>('mi');
-  const [mapType, setMapType] = useState<'map' | 'satellite'>('map');
+  const [mapType, setMapType] = useState<MapType>('map');
   const [routeElevations, setRouteElevations] = useState<number[]>([]);
   const [elevationData, setElevationData] = useState<{distance: number, elevation: number}[]>([]);
   const [hoverPosition, setHoverPosition] = useState<number | null>(null);

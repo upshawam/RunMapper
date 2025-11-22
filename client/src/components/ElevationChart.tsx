@@ -1,5 +1,6 @@
 import { Card } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import { X } from 'lucide-react';
 
 interface ElevationPoint {
   distance: number;
@@ -85,9 +86,10 @@ export default function ElevationChart({ data, unit, onToggleCollapse, onHoverPo
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            className="p-1 hover:bg-gray-100 rounded transition-colors"
+            title="Hide elevation profile"
           >
-            Hide
+            <X className="w-4 h-4 text-gray-700 hover:text-gray-900" />
           </button>
         )}
       </div>

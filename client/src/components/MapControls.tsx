@@ -18,8 +18,7 @@ export default function MapControls({
     <div className="flex flex-col gap-2" data-testid="container-map-controls">
       <Button
         size="icon"
-        variant="secondary"
-        className="rounded-full shadow-lg"
+        className="rounded-full shadow-lg bg-white hover:bg-gray-50 border-2"
         onClick={onZoomIn}
         data-testid="button-zoom-in"
       >
@@ -28,8 +27,7 @@ export default function MapControls({
       
       <Button
         size="icon"
-        variant="secondary"
-        className="rounded-full shadow-lg"
+        className="rounded-full shadow-lg bg-white hover:bg-gray-50 border-2"
         onClick={onZoomOut}
         data-testid="button-zoom-out"
       >
@@ -38,8 +36,7 @@ export default function MapControls({
       
       <Button
         size="icon"
-        variant="secondary"
-        className="rounded-full shadow-lg"
+        className="rounded-full shadow-lg bg-white hover:bg-gray-50 border-2"
         onClick={onLocate}
         data-testid="button-locate"
       >
@@ -48,8 +45,7 @@ export default function MapControls({
       
       <Button
         size="icon"
-        variant="secondary"
-        className="rounded-full shadow-lg"
+        className="rounded-full shadow-lg bg-white hover:bg-gray-50 border-2"
         onClick={onFitRoute}
         data-testid="button-fit-route"
       >

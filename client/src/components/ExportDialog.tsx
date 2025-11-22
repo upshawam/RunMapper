@@ -94,8 +94,7 @@ export default function ExportDialog({ routePoints, disabled }: ExportDialogProp
 
   return (
     <Button 
-      variant="secondary" 
-      className="gap-2 shadow-lg"
+      className="gap-2 shadow-lg bg-white hover:bg-gray-50 border-2"
       disabled={disabled || routePoints.length < 2}
       data-testid="button-export"
       onClick={() => {

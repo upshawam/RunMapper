@@ -1,8 +1,8 @@
-import MapTypeToggle from '../MapTypeToggle';
+import MapTypeToggle, { MapType } from '../MapTypeToggle';
 import { useState } from 'react';
 
 export default function MapTypeToggleExample() {
-  const [mapType, setMapType] = useState<'map' | 'satellite'>('map');
+  const [mapType, setMapType] = useState<MapType>('map');
   
   return (
     <MapTypeToggle 

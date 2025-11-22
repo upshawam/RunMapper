@@ -12,8 +12,7 @@ export default function RouteActions({ onUndo, onClear, canUndo = false }: Route
     <div className="flex gap-2" data-testid="container-route-actions">
       <Button
         size="sm"
-        variant="secondary"
-        className="gap-2"
+        className="gap-2 bg-white hover:bg-gray-50 border-2 shadow-lg"
         onClick={onUndo}
         disabled={!canUndo}
         data-testid="button-undo"
@@ -24,8 +23,7 @@ export default function RouteActions({ onUndo, onClear, canUndo = false }: Route
       
       <Button
         size="sm"
-        variant="secondary"
-        className="gap-2"
+        className="gap-2 bg-white hover:bg-gray-50 border-2 shadow-lg"
         onClick={onClear}
         disabled={!canUndo}
         data-testid="button-clear"

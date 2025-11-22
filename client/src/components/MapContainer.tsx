@@ -8,9 +8,15 @@ interface RoutePoint {
   elevation?: number;
 }
 
+type MapType = 
+  | 'map' 
+  | 'satellite' 
+  | 'hybrid'
+  | 'esri-topo';
+
 interface MapContainerProps {
   onRouteChange?: (points: RoutePoint[], distance: number, elevations?: number[], elevationData?: {distance: number, elevation: number}[], fullCoords?: RoutePoint[]) => void;
-  mapType?: 'map' | 'satellite';
+  mapType?: MapType;
   className?: string;
   routePoints?: RoutePoint[];
   hoverPosition?: number | null;
@@ -172,6 +178,8 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
     roadsOverlayRef.current = roadsOverlay;
 
     if (mapType === 'satellite') {
+      satelliteLayer.addTo(map);
+    } else if (mapType === 'hybrid') {
       satelliteLayer.addTo(map);
       roadsOverlay.addTo(map);
     } else {
@@ -388,15 +396,33 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
         }
       ).addTo(mapInstanceRef.current);
 
+      satelliteLayerRef.current = satelliteLayer;
+      roadsOverlayRef.current = null;
+    } else if (mapType === 'hybrid') {
+      // Use Esri World Imagery with OpenStreetMap overlay
+      const satelliteLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {
+          attribution: 'Tiles © Esri',
+          maxZoom: 19,
+        }
+      ).addTo(mapInstanceRef.current);
+
       const roadsOverlay = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19,
-        opacity: 0.5,
+        opacity: 0.4,
       }).addTo(mapInstanceRef.current);
 
       satelliteLayerRef.current = satelliteLayer;
       roadsOverlayRef.current = roadsOverlay;
+    } else if (mapType === 'esri-topo') {
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles © Esri',
+        maxZoom: 19,
+      }).addTo(mapInstanceRef.current);
     } else {
+      // Default to OpenStreetMap
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19,

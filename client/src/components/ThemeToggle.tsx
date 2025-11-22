@@ -24,9 +24,8 @@ export default function ThemeToggle() {
   return (
     <Button
       size="icon"
-      variant="ghost"
+      className="rounded-full bg-white hover:bg-gray-50 border-2 shadow-lg"
       onClick={toggleTheme}
-      className="rounded-full"
       data-testid="button-theme-toggle"
     >
       {theme === 'light' ? (
