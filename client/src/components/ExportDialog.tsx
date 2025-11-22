@@ -1,4 +1,5 @@
 import { Download, Share2 } from 'lucide-react';
+import React from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -21,9 +22,11 @@ interface ExportDialogProps {
 }
 
 export default function ExportDialog({ routePoints, disabled }: ExportDialogProps) {
+  const [isOpen, setIsOpen] = React.useState(false);
+  
   const generateGPX = () => {
     const gpxHeader = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Route Planner">
+<gpx version="1.1" creator="RunMapper" xmlns="http://www.topografix.com/GPX/1/1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
   <trk>
     <name>My Running Route</name>
     <trkseg>`;
@@ -32,7 +35,7 @@ export default function ExportDialog({ routePoints, disabled }: ExportDialogProp
       .map(
         (point) =>
           `      <trkpt lat="${point.lat}" lon="${point.lng}">
-        <ele>${point.elevation || 0}</ele>
+        <ele>${(point.elevation || 0).toFixed(1)}</ele>
       </trkpt>`
       )
       .join('\n');
@@ -58,43 +61,49 @@ export default function ExportDialog({ routePoints, disabled }: ExportDialogProp
     URL.revokeObjectURL(url);
   };
 
-  return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button 
-          variant="secondary" 
-          className="gap-2 shadow-lg"
-          disabled={disabled || routePoints.length < 2}
-          data-testid="button-export"
-        >
-          <Share2 className="w-4 h-4" />
-          Export
-        </Button>
-      </DialogTrigger>
-      <DialogContent data-testid="dialog-export">
-        <DialogHeader>
-          <DialogTitle>Export Route</DialogTitle>
-          <DialogDescription>
+  // Temporary: Test with simple div instead of Dialog
+  if (isOpen) {
+    return (
+      <div className="fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center">
+        <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
+          <h2 className="text-lg font-semibold mb-4">Export Route</h2>
+          <p className="text-sm text-gray-600 mb-4">
             Download your route as a GPX file for use with GPS devices and fitness apps.
-          </DialogDescription>
-        </DialogHeader>
-        
-        <div className="space-y-4 pt-4">
-          <Button 
-            className="w-full gap-2" 
-            onClick={downloadGPX}
-            data-testid="button-download-gpx"
-          >
-            <Download className="w-4 h-4" />
-            Download GPX File
-          </Button>
-          
-          <div className="text-sm text-muted-foreground">
-            <p className="mb-2">Your route contains {routePoints.length} points.</p>
-            <p>GPX files can be imported into apps like Strava, Garmin Connect, and more.</p>
+          </p>
+          <div className="space-y-4">
+            <Button 
+              className="w-full gap-2" 
+              onClick={downloadGPX}
+              data-testid="button-download-gpx"
+            >
+              <Download className="w-4 h-4" />
+              Download GPX File
+            </Button>
+            <Button 
+              variant="outline" 
+              className="w-full" 
+              onClick={() => setIsOpen(false)}
+            >
+              Cancel
+            </Button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    );
+  }
+
+  return (
+    <Button 
+      variant="secondary" 
+      className="gap-2 shadow-lg"
+      disabled={disabled || routePoints.length < 2}
+      data-testid="button-export"
+      onClick={() => {
+        setIsOpen(true);
+      }}
+    >
+      <Share2 className="w-4 h-4" />
+      Export
+    </Button>
   );
 }

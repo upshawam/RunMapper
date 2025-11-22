@@ -23,8 +23,9 @@ export default function RoutePlanner() {
   const [routeElevations, setRouteElevations] = useState<number[]>([]);
   const [elevationData, setElevationData] = useState<{distance: number, elevation: number}[]>([]);
   const [hoverPosition, setHoverPosition] = useState<number | null>(null);
+  const [fullRouteCoords, setFullRouteCoords] = useState<RoutePoint[]>([]);
 
-  const handleRouteChange = (points: RoutePoint[], newDistance: number, elevations?: number[], elevationChartData?: {distance: number, elevation: number}[]) => {
+  const handleRouteChange = (points: RoutePoint[], newDistance: number, elevations?: number[], elevationChartData?: {distance: number, elevation: number}[], fullCoords?: RoutePoint[]) => {
     setRoutePoints(points);
     setDistance(newDistance);
     if (elevations) {
@@ -32,6 +33,9 @@ export default function RoutePlanner() {
     }
     if (elevationChartData) {
       setElevationData(elevationChartData);
+    }
+    if (fullCoords) {
+      setFullRouteCoords(fullCoords);
     }
   };
 
@@ -47,6 +51,7 @@ export default function RoutePlanner() {
     setRoutePoints([]);
     setRouteElevations([]);
     setElevationData([]);
+    setFullRouteCoords([]);
     setDistance(0);
     console.log('Clear route');
     window.location.reload();
@@ -120,7 +125,7 @@ export default function RoutePlanner() {
             canUndo={routePoints.length > 0}
           />
           <ExportDialog 
-            routePoints={routePoints}
+            routePoints={fullRouteCoords.length > 0 ? fullRouteCoords : routePoints}
           />
         </div>
         <div className="w-96">

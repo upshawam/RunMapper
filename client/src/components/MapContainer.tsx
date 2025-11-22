@@ -9,7 +9,7 @@ interface RoutePoint {
 }
 
 interface MapContainerProps {
-  onRouteChange?: (points: RoutePoint[], distance: number, elevations?: number[], elevationData?: {distance: number, elevation: number}[]) => void;
+  onRouteChange?: (points: RoutePoint[], distance: number, elevations?: number[], elevationData?: {distance: number, elevation: number}[], fullCoords?: RoutePoint[]) => void;
   mapType?: 'map' | 'satellite';
   className?: string;
   routePoints?: RoutePoint[];
@@ -339,6 +339,7 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       
       // Calculate cumulative distances for each coordinate
       const elevationData: {distance: number, elevation: number}[] = [];
+      const fullRoutePoints: RoutePoint[] = [];
       let cumulativeDistance = 0;
       
       coords.forEach((coord, index) => {
@@ -349,12 +350,17 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
           distance: cumulativeDistance,
           elevation: routeElevationsRef.current[index] || 0
         });
+        fullRoutePoints.push({
+          lat: coord.lat,
+          lng: coord.lng,
+          elevation: routeElevationsRef.current[index] || 0
+        });
         if (index < coords.length - 1) {
           totalDistance += coord.distanceTo(coords[index + 1]);
         }
       });
 
-      onRouteChange?.(routePointsRef.current, totalDistance, routeElevationsRef.current, elevationData);
+      onRouteChange?.(routePointsRef.current, totalDistance, routeElevationsRef.current, elevationData, fullRoutePoints);
     };
 
     return () => {
@@ -443,6 +449,7 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
         
         // Calculate cumulative distances for each coordinate
         const elevationData: {distance: number, elevation: number}[] = [];
+        const fullRoutePoints: RoutePoint[] = [];
         let cumulativeDistance = 0;
         
         coords.forEach((coord, index) => {
@@ -453,12 +460,17 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
             distance: cumulativeDistance,
             elevation: routeElevationsRef.current[index] || 0
           });
+          fullRoutePoints.push({
+            lat: coord.lat,
+            lng: coord.lng,
+            elevation: routeElevationsRef.current[index] || 0
+          });
           if (index < coords.length - 1) {
             totalDistance += coord.distanceTo(coords[index + 1]);
           }
         });
         
-        onRouteChange?.(routePointsRef.current, totalDistance, routeElevationsRef.current, elevationData);
+        onRouteChange?.(routePointsRef.current, totalDistance, routeElevationsRef.current, elevationData, fullRoutePoints);
       } else {
         onRouteChange?.(routePointsRef.current, 0, [], []);
       }
