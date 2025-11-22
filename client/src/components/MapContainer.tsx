@@ -111,32 +111,38 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
     });
 
     const blueIcon = L.icon({
-      iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iIzM4OTVmZiIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
+      iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1zbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iIzM4OTVmZiIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
       iconSize: [24, 24],
       iconAnchor: [12, 12],
     });
 
     const redIcon = L.icon({
-      iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iI2VmNDQ0NCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
+      iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1zbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iOCIgZmlsbD0iI2VmNDQ0NCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPg==',
       iconSize: [24, 24],
       iconAnchor: [12, 12],
     });
 
     map.on('click', async (e: L.LeafletMouseEvent) => {
+      console.log('Map clicked at:', e.latlng);
       const point: RoutePoint = {
         lat: e.latlng.lat,
         lng: e.latlng.lng,
         elevation: Math.floor(Math.random() * 200) + 50,
       };
 
+      console.log('New point:', point);
       const isFirst = routePointsRef.current.length === 0;
-      
+      console.log('Is first point:', isFirst);
+
       if (!isFirst) {
         const lastPoint = routePointsRef.current[routePointsRef.current.length - 1];
+        console.log('Last point:', lastPoint);
         const routeCoords = await getRouteBetweenPoints(
           [lastPoint.lat, lastPoint.lng],
           [point.lat, point.lng]
         );
+
+        console.log('Route coordinates:', routeCoords);
 
         if (polylineRef.current) {
           const existingCoords = polylineRef.current.getLatLngs() as L.LatLng[];
@@ -152,6 +158,7 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
       }
 
       routePointsRef.current.push(point);
+      console.log('Updated route points:', routePointsRef.current);
 
       const isLast = routePointsRef.current.length > 1;
       const iconToUse = isFirst ? greenIcon : isLast ? redIcon : blueIcon;
@@ -160,6 +167,8 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
         icon: iconToUse,
         draggable: true 
       }).addTo(map);
+
+      console.log('Marker added:', marker);
 
       marker.on('dragend', async () => {
         const idx = markersRef.current.indexOf(marker);
@@ -170,11 +179,12 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
             lat: newLatLng.lat,
             lng: newLatLng.lng,
           };
+          console.log('Marker dragged to:', newLatLng);
           await rebuildRoute();
         }
       });
 
-            if (markersRef.current.length > 0) {
+      if (markersRef.current.length > 0) {
         const lastMarker = markersRef.current[markersRef.current.length - 1];
         if (markersRef.current.length > 1) {
           lastMarker.setIcon(blueIcon);
@@ -182,6 +192,7 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
       }
 
       markersRef.current.push(marker);
+      console.log('Updated markers:', markersRef.current);
       calculateDistance();
     });
 
@@ -249,7 +260,8 @@ export default function MapContainer({ onRouteChange, mapType = 'map', className
   useEffect(() => {
     if (!mapInstanceRef.current || !isMapReady) return;
 
-    mapInstanceRef.current.eachLayer((layer) => {
+    mapInstanceRef.current.eachLayer((layer: L.Layer) => {
+      // Explicitly typed layer
       if (layer instanceof L.TileLayer) {
         mapInstanceRef.current?.removeLayer(layer);
       }
