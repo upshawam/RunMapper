@@ -97,8 +97,8 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       if (currentRoutingService === 'openrouteservice') {
         const url = "https://api.openrouteservice.org/v2/directions/foot-walking/geojson";
         onDebugUpdate?.({
-          routingService,
-          elevationService,
+          routingService: currentRoutingService,
+          elevationService: currentElevationService,
           lastRoutingCall: url,
           routingStatus: 'pending'
         });
