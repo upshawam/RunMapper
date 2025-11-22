@@ -43,7 +43,6 @@ export default function RoutePlanner() {
     if (routePoints.length > 0) {
       const newPoints = routePoints.slice(0, -1);
       setRoutePoints(newPoints);
-      console.log('Undo last point');
     }
   };
 
@@ -53,7 +52,6 @@ export default function RoutePlanner() {
     setElevationData([]);
     setFullRouteCoords([]);
     setDistance(0);
-    console.log('Clear route');
     window.location.reload();
   };
 

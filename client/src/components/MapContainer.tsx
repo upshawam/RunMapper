@@ -35,6 +35,7 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
   const hoverMarkerRef = useRef<L.Marker | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [isProcessingClick, setIsProcessingClick] = useState(false);
+  const [hasShownNetworkWarning, setHasShownNetworkWarning] = useState(false);
 
   // Define icons
   const greenIcon = L.icon({
@@ -108,7 +109,10 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
 
       return { coords: parsedCoords, elevations };
     } catch (error) {
-      console.error('Routing error:', error instanceof Error ? error.message : String(error));
+      if (!hasShownNetworkWarning) {
+        setHasShownNetworkWarning(true);
+        console.info('Network restrictions detected - using basic routing without elevation data');
+      }
       return {
         coords: [start, end],
         elevations: [100, 100]
@@ -123,16 +127,23 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       );
       
       if (!response.ok) {
-        console.warn('Elevation API failed, using default elevation');
-        return 100; // Default elevation
+        if (!hasShownNetworkWarning) {
+          setHasShownNetworkWarning(true);
+          // Could add a toast notification here if we had a toast system
+          console.info('Network restrictions detected - using basic routing without elevation data');
+        }
+        return 100;
       }
 
       const data = await response.json();
       const elevation = data.results?.[0]?.elevation;
       return elevation || 100;
     } catch (error) {
-      console.error('Elevation error:', error);
-      return 100; // Default elevation
+      if (!hasShownNetworkWarning) {
+        setHasShownNetworkWarning(true);
+        console.info('Network restrictions detected - using basic routing without elevation data');
+      }
+      return 100;
     }
   };
 
@@ -205,7 +216,6 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       if (isProcessingClick) return; // Prevent multiple clicks while processing
       
       setIsProcessingClick(true);
-      console.log('Map clicked at:', e.latlng);
       
       // Get elevation for the clicked point
       const elevation = await getElevation(e.latlng.lat, e.latlng.lng);
@@ -216,19 +226,14 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
         elevation: elevation,
       };
 
-      console.log('New point:', point);
       const isFirst = routePointsRef.current.length === 0;
-      console.log('Is first point:', isFirst);
 
       if (!isFirst) {
         const lastPoint = routePointsRef.current[routePointsRef.current.length - 1];
-        console.log('Last point:', lastPoint);
         const routeData = await getRouteBetweenPoints(
           [lastPoint.lat, lastPoint.lng],
           [point.lat, point.lng]
         );
-
-        console.log('Route coordinates:', routeData.coords);
 
         if (polylineRef.current) {
           const existingCoords = polylineRef.current.getLatLngs() as L.LatLng[];
@@ -252,13 +257,10 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       }
 
       routePointsRef.current.push(point);
-      console.log('Updated route points:', routePointsRef.current);
 
       const marker = L.marker([point.lat, point.lng], { 
         draggable: true 
       }).addTo(map);
-
-      console.log('Marker added:', marker);
 
       marker.on('dragend', async () => {
         const idx = markersRef.current.indexOf(marker);
@@ -271,13 +273,11 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
             lng: newLatLng.lng,
             elevation: newElevation,
           };
-          console.log('Marker dragged to:', newLatLng);
           await rebuildRoute();
         }
       });
 
       markersRef.current.push(marker);
-      console.log('Updated markers:', markersRef.current);
 
       // Update all marker icons based on their position
       updateMarkerIcons();
@@ -580,6 +580,14 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       style={{ cursor: isProcessingClick ? 'wait' : 'crosshair' }}
       data-testid="map-container"
     >
+      {hasShownNetworkWarning && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-yellow-100 border border-yellow-300 text-yellow-800 px-4 py-2 rounded-lg shadow-lg text-sm">
+          <div className="flex items-center gap-2">
+            <span>⚠️</span>
+            <span>Network restrictions detected - using basic routing</span>
+          </div>
+        </div>
+      )}
       {isProcessingClick && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-white/90 px-3 py-1 rounded-lg shadow-lg text-sm font-medium text-gray-700">
           Calculating route...
