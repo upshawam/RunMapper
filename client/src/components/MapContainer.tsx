@@ -601,7 +601,13 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       // Update all marker icons based on their position
       updateMarkerIcons();
       
-      calculateDistance();
+      // Ensure a polyline exists once we have 2+ points (guards rare cases where the
+      // segment construction above might be skipped by the routing/freehand branches).
+      if (!polylineRef.current && routePointsRef.current.length >= 2) {
+        await rebuildRoute();
+      } else {
+        calculateDistance();
+      }
       
       setIsProcessingClick(false);
     });    const rebuildRoute = async () => {
