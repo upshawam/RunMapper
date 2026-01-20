@@ -8,6 +8,7 @@ import ExportDialog from '@/components/ExportDialog';
 import RouteActions from '@/components/RouteActions';
 import ThemeToggle from '@/components/ThemeToggle';
 import LocationSearch from '@/components/LocationSearch';
+import FreehandToggle from '@/components/FreehandToggle';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface RoutePoint {
@@ -30,6 +31,7 @@ export default function RoutePlanner() {
   const [fullRouteCoords, setFullRouteCoords] = useState<RoutePoint[]>([]);
   const [routingService, setRoutingService] = useState<RoutingService>('openrouteservice');
   const [elevationService, setElevationService] = useState<ElevationService>('open-elevation');
+  const [isFreehand, setIsFreehand] = useState(false);
   const [debugInfo, setDebugInfo] = useState<{
     routingService: string;
     elevationService: string;
@@ -116,6 +118,7 @@ export default function RoutePlanner() {
         hoverPosition={hoverPosition}
         routingService={routingService}
         elevationService={elevationService}
+        isFreehand={isFreehand}
         onDebugUpdate={setDebugInfo}
         ref={mapRef}
       />
@@ -142,6 +145,10 @@ export default function RoutePlanner() {
 
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex flex-col gap-3 items-center">
         <div className="flex gap-2">
+          <FreehandToggle 
+            isFreehand={isFreehand}
+            onToggle={setIsFreehand}
+          />
           <MapTypeToggle 
             mapType={mapType}
             onToggle={setMapType}

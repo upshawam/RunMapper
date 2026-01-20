@@ -25,6 +25,7 @@ interface MapContainerProps {
   hoverPosition?: number | null;
   routingService?: RoutingService;
   elevationService?: ElevationService;
+  isFreehand?: boolean;
   onDebugUpdate?: (debugInfo: {
     routingService: string;
     elevationService: string;
@@ -35,7 +36,7 @@ interface MapContainerProps {
   }) => void;
 }
 
-const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChange, mapType = 'map', className = '', routePoints = [], hoverPosition, routingService = 'openrouteservice', elevationService = 'open-elevation', onDebugUpdate }, ref) => {
+const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChange, mapType = 'map', className = '', routePoints = [], hoverPosition, routingService = 'openrouteservice', elevationService = 'open-elevation', isFreehand = false, onDebugUpdate }, ref) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const routePointsRef = useRef<RoutePoint[]>([]);
@@ -53,6 +54,7 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
   // Refs to store current service values (to avoid stale closures in event handlers)
   const routingServiceRef = useRef<RoutingService>(routingService);
   const elevationServiceRef = useRef<ElevationService>(elevationService);
+  const isFreehandRef = useRef<boolean>(isFreehand);
 
   // Define icons
   const greenIcon = L.icon({
@@ -448,7 +450,8 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
   useEffect(() => {
     routingServiceRef.current = routingService;
     elevationServiceRef.current = elevationService;
-  }, [routingService, elevationService]);
+    isFreehandRef.current = isFreehand;
+  }, [routingService, elevationService, isFreehand]);
 
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
@@ -519,7 +522,8 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
 
       const isFirst = routePointsRef.current.length === 0;
 
-      if (!isFirst) {
+      if (!isFirst && !isFreehandRef.current) {
+        // Normal routing mode: calculate route between points
         const lastPoint = routePointsRef.current[routePointsRef.current.length - 1];
         const routeData = await getRouteBetweenPoints(
           [lastPoint.lat, lastPoint.lng],
@@ -544,6 +548,30 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
           segmentLengthsRef.current.push(routeData.coords.length);
           // Store all elevations for the first segment
           routeElevationsRef.current = [...routeData.elevations];
+        }
+      } else if (!isFirst && isFreehandRef.current) {
+        // Freehand mode: directly connect points with a straight line
+        const lastPoint = routePointsRef.current[routePointsRef.current.length - 1];
+        const coords: [number, number][] = [
+          [lastPoint.lat, lastPoint.lng],
+          [point.lat, point.lng]
+        ];
+        const elevations = [lastPoint.elevation || 100, elevation];
+
+        if (polylineRef.current) {
+          const existingCoords = polylineRef.current.getLatLngs() as L.LatLng[];
+          const newCoords = [...existingCoords, ...coords.slice(1).map(coord => L.latLng(coord[0], coord[1]))];
+          polylineRef.current.setLatLngs(newCoords);
+          segmentLengthsRef.current.push(1);
+          routeElevationsRef.current.push(...elevations.slice(1));
+        } else {
+          polylineRef.current = L.polyline(coords, {
+            color: '#3b82f6',
+            weight: 4,
+            opacity: 0.8,
+          }).addTo(map);
+          segmentLengthsRef.current.push(2);
+          routeElevationsRef.current = [...elevations];
         }
       }
 
@@ -592,22 +620,29 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       let allElevations: number[] = [];
       segmentLengthsRef.current = [];
       
-      for (let i = 0; i < routePointsRef.current.length - 1; i++) {
-        const start = routePointsRef.current[i];
-        const end = routePointsRef.current[i + 1];
-        const routeData = await getRouteBetweenPoints(
-          [start.lat, start.lng],
-          [end.lat, end.lng]
-        );
-        
-        if (i === 0) {
-          allCoords = [...routeData.coords];
-          allElevations = [...routeData.elevations];
-          segmentLengthsRef.current.push(routeData.coords.length);
-        } else {
-          allCoords = [...allCoords, ...routeData.coords.slice(1)];
-          allElevations = [...allElevations, ...routeData.elevations.slice(1)];
-          segmentLengthsRef.current.push(routeData.coords.length - 1);
+      if (isFreehandRef.current) {
+        // Freehand mode: directly connect all points in sequence
+        allCoords = routePointsRef.current.map(p => [p.lat, p.lng]);
+        allElevations = routePointsRef.current.map(p => p.elevation || 100);
+      } else {
+        // Normal routing mode: calculate routes between consecutive points
+        for (let i = 0; i < routePointsRef.current.length - 1; i++) {
+          const start = routePointsRef.current[i];
+          const end = routePointsRef.current[i + 1];
+          const routeData = await getRouteBetweenPoints(
+            [start.lat, start.lng],
+            [end.lat, end.lng]
+          );
+          
+          if (i === 0) {
+            allCoords = [...routeData.coords];
+            allElevations = [...routeData.elevations];
+            segmentLengthsRef.current.push(routeData.coords.length);
+          } else {
+            allCoords = [...allCoords, ...routeData.coords.slice(1)];
+            allElevations = [...allElevations, ...routeData.elevations.slice(1)];
+            segmentLengthsRef.current.push(routeData.coords.length - 1);
+          }
         }
       }
 

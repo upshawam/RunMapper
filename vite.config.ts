@@ -7,7 +7,7 @@ import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  base: "/RunMapper/",   // important for GitHub Pages
+  base: process.env.NODE_ENV === "production" ? "/RunMapper/" : "/",   // use /RunMapper/ for GitHub Pages, / for local dev
   plugins: [
     react(),
     runtimeErrorOverlay(),
@@ -37,8 +37,7 @@ export default defineConfig({
   },
   server: {
     fs: {
-      strict: true,
-      deny: ["**/.*"],
+      strict: false,
     },
   },
 });
