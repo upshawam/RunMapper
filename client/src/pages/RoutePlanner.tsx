@@ -215,46 +215,6 @@ export default function RoutePlanner() {
           </button>
         </div>
       )}
-
-      {/* Debug Panel */}
-      <div className="absolute bottom-4 right-4 z-[1000] bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg p-3 shadow-lg max-w-xs">
-        <div className="text-xs font-semibold text-gray-700 mb-2">API Debug Info</div>
-        <div className="space-y-1 text-xs">
-          <div><span className="font-medium">Routing:</span> {debugInfo.routingService}</div>
-          <div><span className="font-medium">Elevation:</span> {debugInfo.elevationService}</div>
-          {(debugInfo.routingService === 'mapbox' || debugInfo.elevationService === 'mapbox') && (
-            <div className="text-xs text-orange-600 bg-orange-50 p-1 rounded">
-              ⚠️ Mapbox requires token & has usage limits
-            </div>
-          )}
-          {debugInfo.lastElevationCall && (
-            <div className="mt-2">
-              <div className="font-medium">Last Elevation Call:</div>
-              <div className={`text-xs break-all ${debugInfo.elevationStatus === 'success' ? 'text-green-600' : debugInfo.elevationStatus === 'error' ? 'text-red-600' : 'text-blue-600'}`}>
-                {debugInfo.lastElevationCall}
-              </div>
-              {debugInfo.elevationStatus && (
-                <div className={`text-xs font-medium ${debugInfo.elevationStatus === 'success' ? 'text-green-600' : debugInfo.elevationStatus === 'error' ? 'text-red-600' : 'text-blue-600'}`}>
-                  Status: {debugInfo.elevationStatus}
-                </div>
-              )}
-            </div>
-          )}
-          {debugInfo.lastRoutingCall && (
-            <div className="mt-2">
-              <div className="font-medium">Last Routing Call:</div>
-              <div className={`text-xs break-all ${debugInfo.routingStatus === 'success' ? 'text-green-600' : debugInfo.routingStatus === 'error' ? 'text-red-600' : 'text-blue-600'}`}>
-                {debugInfo.lastRoutingCall}
-              </div>
-              {debugInfo.routingStatus && (
-                <div className={`text-xs font-medium ${debugInfo.routingStatus === 'success' ? 'text-green-600' : debugInfo.routingStatus === 'error' ? 'text-red-600' : 'text-blue-600'}`}>
-                  Status: {debugInfo.routingStatus}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
