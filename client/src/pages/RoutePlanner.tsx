@@ -80,7 +80,6 @@ export default function RoutePlanner() {
     setElevationData([]);
     setFullRouteCoords([]);
     setDistance(0);
-    window.location.reload();
   };
 
   const elevationGain = routeElevations.reduce((gain, elevation, index) => {
