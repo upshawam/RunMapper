@@ -12,7 +12,10 @@ type MapType =
   | 'map' 
   | 'satellite' 
   | 'hybrid'
-  | 'esri-topo';
+  | 'esri-topo'
+  | 'terrain'
+  | 'outdoors'
+  | 'cyclosm';
 
 type RoutingService = 'openrouteservice' | 'osrm' | 'mapbox' | 'thunderforest' | 'straight';
 type ElevationService = 'open-elevation' | 'mapbox' | 'usgs' | 'none';
@@ -507,71 +510,92 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
     }
 
     map.on('click', async (e: L.LeafletMouseEvent) => {
-      if (isProcessingClick) return; // Prevent multiple clicks while processing
+      if (isProcessingClick) return;
       
       setIsProcessingClick(true);
-      
-      // Get elevation for the clicked point
-      const elevation = await getElevation(e.latlng.lat, e.latlng.lng);
       
       const point: RoutePoint = {
         lat: e.latlng.lat,
         lng: e.latlng.lng,
-        elevation: elevation,
+        elevation: 100, // Will be updated asynchronously
       };
 
       const isFirst = routePointsRef.current.length === 0;
 
+      // For routed mode, get the route path immediately before showing anything
       if (!isFirst && !isFreehandRef.current) {
-        // Normal routing mode: calculate route between points
         const lastPoint = routePointsRef.current[routePointsRef.current.length - 1];
-        const routeData = await getRouteBetweenPoints(
-          [lastPoint.lat, lastPoint.lng],
-          [point.lat, point.lng]
-        );
+        
+        try {
+          const routeData = await getRouteBetweenPoints(
+            [lastPoint.lat, lastPoint.lng],
+            [point.lat, point.lng]
+          );
 
-        if (polylineRef.current) {
-          const existingCoords = polylineRef.current.getLatLngs() as L.LatLng[];
-          const newCoords = [...existingCoords, ...routeData.coords.slice(1).map(coord => L.latLng(coord[0], coord[1]))];
-          polylineRef.current.setLatLngs(newCoords);
-          // Store how many coordinates this segment added (excluding the first point which overlaps)
-          segmentLengthsRef.current.push(routeData.coords.length - 1);
-          // Add elevations for this segment (excluding the first point which overlaps)
-          routeElevationsRef.current.push(...routeData.elevations.slice(1));
-        } else {
-          polylineRef.current = L.polyline(routeData.coords, {
-            color: '#3b82f6',
-            weight: 4,
-            opacity: 0.8,
-          }).addTo(map);
-          // First segment includes all coordinates
-          segmentLengthsRef.current.push(routeData.coords.length);
-          // Store all elevations for the first segment
-          routeElevationsRef.current = [...routeData.elevations];
+          if (polylineRef.current) {
+            const existingCoords = polylineRef.current.getLatLngs() as L.LatLng[];
+            const newCoords = [...existingCoords, ...routeData.coords.slice(1).map(coord => L.latLng(coord[0], coord[1]))];
+            polylineRef.current.setLatLngs(newCoords);
+            segmentLengthsRef.current.push(routeData.coords.length - 1);
+            routeElevationsRef.current.push(...routeData.elevations.slice(1));
+          } else {
+            polylineRef.current = L.polyline(routeData.coords, {
+              color: '#3b82f6',
+              weight: 4,
+              opacity: 0.8,
+              pane: 'overlayPane',
+            }).addTo(map);
+            segmentLengthsRef.current.push(routeData.coords.length);
+            routeElevationsRef.current = [...routeData.elevations];
+          }
+        } catch (error) {
+          console.error('Routing failed, using straight line:', error);
+          // Fallback to straight line if routing fails
+          const straightCoords: [number, number][] = [
+            [lastPoint.lat, lastPoint.lng],
+            [point.lat, point.lng]
+          ];
+          if (polylineRef.current) {
+            const existingCoords = polylineRef.current.getLatLngs() as L.LatLng[];
+            const newCoords = [...existingCoords, L.latLng(point.lat, point.lng)];
+            polylineRef.current.setLatLngs(newCoords);
+            segmentLengthsRef.current.push(1);
+            routeElevationsRef.current.push(100);
+          } else {
+            polylineRef.current = L.polyline(straightCoords, {
+              color: '#3b82f6',
+              weight: 4,
+              opacity: 0.8,
+              pane: 'overlayPane',
+            }).addTo(map);
+            segmentLengthsRef.current.push(2);
+            routeElevationsRef.current = [100, 100];
+          }
         }
       } else if (!isFirst && isFreehandRef.current) {
-        // Freehand mode: directly connect points with a straight line
+        // Freehand mode: straight line
         const lastPoint = routePointsRef.current[routePointsRef.current.length - 1];
         const coords: [number, number][] = [
           [lastPoint.lat, lastPoint.lng],
           [point.lat, point.lng]
         ];
-        const elevations = [lastPoint.elevation || 100, elevation];
 
         if (polylineRef.current) {
           const existingCoords = polylineRef.current.getLatLngs() as L.LatLng[];
-          const newCoords = [...existingCoords, ...coords.slice(1).map(coord => L.latLng(coord[0], coord[1]))];
+          const newCoords = [...existingCoords, L.latLng(point.lat, point.lng)];
           polylineRef.current.setLatLngs(newCoords);
           segmentLengthsRef.current.push(1);
-          routeElevationsRef.current.push(...elevations.slice(1));
+          routeElevationsRef.current.push(100);
         } else {
+          // First segment in freehand mode - create the polyline
           polylineRef.current = L.polyline(coords, {
             color: '#3b82f6',
             weight: 4,
             opacity: 0.8,
+            pane: 'overlayPane',
           }).addTo(map);
           segmentLengthsRef.current.push(2);
-          routeElevationsRef.current = [...elevations];
+          routeElevationsRef.current = [100, 100];
         }
       }
 
@@ -597,19 +621,36 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       });
 
       markersRef.current.push(marker);
-
-      // Update all marker icons based on their position
       updateMarkerIcons();
       
-      // Ensure a polyline exists once we have 2+ points (guards rare cases where the
-      // segment construction above might be skipped by the routing/freehand branches).
+      // Ensure polyline exists if we have 2+ points
       if (!polylineRef.current && routePointsRef.current.length >= 2) {
-        await rebuildRoute();
-      } else {
-        calculateDistance();
+        // Create initial polyline from all current points
+        const allCoords = routePointsRef.current.map(p => [p.lat, p.lng] as [number, number]);
+        polylineRef.current = L.polyline(allCoords, {
+          color: '#3b82f6',
+          weight: 4,
+          opacity: 0.8,
+          pane: 'overlayPane',
+        }).addTo(map);
+        segmentLengthsRef.current = [allCoords.length];
+        routeElevationsRef.current = routePointsRef.current.map(p => p.elevation || 100);
       }
       
+      calculateDistance();
+      
       setIsProcessingClick(false);
+
+      // Fetch accurate elevations in the background
+      const pointIndex = routePointsRef.current.length - 1;
+      getElevation(point.lat, point.lng).then(elevation => {
+        routePointsRef.current[pointIndex].elevation = elevation;
+        // Update the last elevation value
+        if (routeElevationsRef.current.length > 0) {
+          routeElevationsRef.current[routeElevationsRef.current.length - 1] = elevation;
+        }
+        calculateDistance();
+      });
     });    const rebuildRoute = async () => {
       if (polylineRef.current) {
         map.removeLayer(polylineRef.current);
@@ -658,6 +699,7 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
         color: '#3b82f6',
         weight: 4,
         opacity: 0.8,
+        pane: 'overlayPane',
       }).addTo(map);
 
       calculateDistance();
@@ -752,6 +794,25 @@ const MapContainer = forwardRef<L.Map | null, MapContainerProps>(({ onRouteChang
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Tiles © Esri',
         maxZoom: 19,
+      }).addTo(mapInstanceRef.current);
+    } else if (mapType === 'terrain') {
+      // Stamen Terrain
+      L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors',
+        maxZoom: 18,
+      }).addTo(mapInstanceRef.current);
+    } else if (mapType === 'outdoors') {
+      // Thunderforest Outdoors (similar style to OnTheGoMap)
+      L.tileLayer('https://tile.thunderforest.com/outdoors/{z}/{x}/{y}.png?apikey=', {
+        attribution: 'Maps © <a href="https://www.thunderforest.com">Thunderforest</a>, Data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+        maxZoom: 22,
+      }).addTo(mapInstanceRef.current);
+    } else if (mapType === 'cyclosm') {
+      // CyclOSM - cycling-focused map with good outdoor detail
+      L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
+        attribution: '<a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases" title="CyclOSM - Open Bicycle render">CyclOSM</a> | Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 20,
+        crossOrigin: true,
       }).addTo(mapInstanceRef.current);
     } else {
       // Default to OpenStreetMap

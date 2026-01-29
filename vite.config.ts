@@ -38,6 +38,10 @@ export default defineConfig({
   server: {
     fs: {
       strict: false,
+      allow: ['..'],
+    },
+    headers: {
+      'Access-Control-Allow-Origin': '*',
     },
   },
 });

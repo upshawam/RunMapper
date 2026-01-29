@@ -4,7 +4,10 @@ export type MapType =
   | 'map' 
   | 'satellite' 
   | 'hybrid'
-  | 'esri-topo';
+  | 'esri-topo'
+  | 'terrain'
+  | 'outdoors'
+  | 'cyclosm';
 
 interface MapTypeToggleProps {
   mapType: MapType;
@@ -16,7 +19,10 @@ export default function MapTypeToggle({ mapType, onToggle }: MapTypeToggleProps)
     'map': 'OpenStreetMap',
     'satellite': 'Satellite',
     'hybrid': 'Satellite + Roads',
-    'esri-topo': 'Esri Topographic'
+    'esri-topo': 'Esri Topographic',
+    'terrain': 'Terrain (Stamen)',
+    'outdoors': 'Outdoors (Thunderforest)',
+    'cyclosm': 'CyclOSM'
   };
 
   return (
